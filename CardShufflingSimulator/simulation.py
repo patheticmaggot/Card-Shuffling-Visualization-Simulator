@@ -55,15 +55,15 @@ class Button:
         self.valueIndex = (self.valueIndex + 1) % len(self.values)
         self.value = self.values[self.valueIndex]
     
-    def draw(self, screen, color):
+    def draw(self, screen, color, textNameX, textNameY, textValuex, textValueY):
         pygame.draw.rect(screen, color, self.button)
         if self.nameText and self.valueText:
-            Draw_text(self.name, sliderValueFont, (0, 0, 0), self.button.x + 5, self.button.y - 25)
-            Draw_text(str(self.value), sliderValueFont, (0, 0, 0), self.button.x + 5, self.button.y)
+            Draw_text(self.name, sliderValueFont, (0, 0, 0), self.button.x + textNameX, self.button.y + textNameY)
+            Draw_text(str(self.value), sliderValueFont, (0, 0, 0), self.button.x + textValuex, self.button.y + textValueY)
         elif self.nameText and not self.valueText:
-            Draw_text(self.name, sliderValueFont, (0, 0, 0), self.button.x + 5, self.button.y)
+            Draw_text(self.name, sliderValueFont, (0, 0, 0), self.button.x + textNameX, self.button.y + textNameY)
         elif not self.nameText and self.valueText:
-            Draw_text(str(self.value), sliderValueFont, (0, 0, 0), self.button.x + 5, self.button.y)
+            Draw_text(str(self.value), sliderValueFont, (0, 0, 0), self.button.x + textValuex, self.button.y + textValueY)
         
 
 settings = {
@@ -80,12 +80,13 @@ shuffles = ["riffleShuffle", "cutDeck", "computer"]
 sliders = {
     "accuracy": Slider((settingsTabX + 10), 100, 200, 25, "accuracy"),
     "offset": Slider((settingsTabX + 10), 150, 200, 25, "offset"),
-    "randomness": Slider((settingsTabX + 10), 200, 200, 25, "randomness")
+    #"randomness": Slider((settingsTabX + 10), 200, 200, 25, "randomness")
 }
 
 buttons = {
-    "shuffle": Button((settingsTabX + 50), (settingsTabHeight - 75), 75, 50, "shuffle", [False, True], True, False),
-    "assignShuffle": Button((settingsTabX + 50), (settingsTabY + 25), 100, 25, "assignShuffle", shuffles, True, True)
+    "shuffle": Button((settingsTabX + 10), (settingsTabHeight - 75), 75, 50, "shuffle", [False, True], True, False),
+    "assignShuffle": Button((settingsTabX + 10), (settingsTabY + 25), 100, 25, "assignShuffle", shuffles, True, True),
+    "resetDeck": Button((settingsTabX + 150), (settingsTabY + 25), 25, 25, "resetDeck", [False, True], True, False)
 }
 
 
@@ -127,7 +128,7 @@ def DisplayDeck(deck):
 
 def ShuffleWithSettings(deck, settings):
     if settings["shuffle"] == "cutDeck":
-        return CutDeck(deck, settings["offset"], settings["randomness"])
+        return CutDeck(deck, settings["offset"], settings["accuracy"])
 
     elif settings["shuffle"] == "riffleShuffle":
         return RiffleShuffle(deck, settings["offset"], settings["accuracy"], settings["inOutRand"])
@@ -143,13 +144,16 @@ def ComputerRandomShuffle(deck):
     shuffledDeck = random.sample(deck, len(deck))
     return shuffledDeck
 
+# Offset: 0.5 = deck split in 2 equal halves, Accuracy: 0.0 = deck cut point completly random 
+# and one half will go as a whole first then the other as  whole, 1.0 = deck cut point is exact 
+# and the halves will deposit exactly one card one after the other
 def RiffleShuffle(deck, offset, accuracy, inOutRand):
     n = len(deck)
     
     offset = max(0.0, min(1.0, offset))
     accuracy = max(0.0, min(1.0, accuracy))
     
-    cutIndex = int(offset * n)
+    cutIndex = CutIndex(n, offset, accuracy)
     
     top = deck[cutIndex:]
     bottom = deck[:cutIndex]
@@ -188,16 +192,16 @@ def RiffleShuffle(deck, offset, accuracy, inOutRand):
     print(offset)        
     return shuffledDeck
 
-def CutDeck(deck, offset, randomness):
+# Offset: 0.5 = deck split in 2 equal halves, Accuracy will decrease radially from the offset 
+# point from 1 untill completly random at 0
+def CutDeck(deck, offset, accuracy):
     n = len(deck)
     
     offset = max(0.0, min(1.0, offset))
-    randomness = max(0.0, min(1.0, randomness))
+    accuracy = max(0.0, min(1.0, accuracy))
     
-    targetCut = offset * n
-    randomCut = random.randint(1, n - 1)
+    cutIndex = CutIndex(n, offset, accuracy)
     
-    cutIndex = int((1 - randomness) * targetCut + randomness * randomCut)
     print(cutIndex)
     top = deck[:cutIndex]
     bottom = deck[cutIndex:]
@@ -206,34 +210,38 @@ def CutDeck(deck, offset, randomness):
     
     return cutDeck
 
+def CutIndex(n, offset, accuracy):
+    targetCut = offset * n
+
+    idealRadius = (1 - accuracy) * (n / 2)
+
+    # Initial bounds
+    low = targetCut - idealRadius
+    high = targetCut + idealRadius
+
+    # Redistribute range to the higher side if hitting the lower bound
+    if low < 0:
+        high += -low
+        low = 0
+
+    # Redistribute range to the lower side if hitting the higher bound
+    if high > n:
+        low -= (high - n)
+        high = n
+
+    low = max(0, low)
+    high = min(n, high)
+
+    cutIndex = int(random.uniform(low, high))
+    
+    return cutIndex
 
 deck = GenDeck(settings["deckSize"])
 deckGenerated = True
 
 running = True
 while running:
-    """
-    controls = input("Do a shuffle(s), Reset the deck(r), Quit(q)")
-    
-    if (controls == "s"):
-        if (not deckGenerated):
-            size = int(input("How many cards do you want in your deck?: "))
-            deck = GenDeck(size)
-            deckGenerated = True
-        shuffle = input("Choose a shuffle type. (Cut(c), Riffle Shuffle(r), Computer shuffle(computer))")
-        deck = ShuffleWithSettings(deck, shuffle)
-    
-    elif (controls == "r"):
-        size = int(input("How many cards do you want in your deck?: "))
-        deck = GenDeck(size)
-        deckGenerated = True
-    
-    elif (controls == "q"):
-        running = False
-        
-    else:
-        print("Worng input.")
-    """
+
     clock.tick(60)
     SCREEN.fill((97, 125, 12))
     pygame.draw.rect(SCREEN, (50, 50, 50), settingsTab)
@@ -271,22 +279,20 @@ while running:
                             button.nextValue()
                             settings["shuffle"] = button.value
                             print(button.value)
-                      
-                        
-                """           
-                if shuffleButton.collidepoint(event.pos):
-                    if shuffleButtonValue == False:
-                        if not deckGenerated:
-                            deck = GenDeck(settings["deckSize"])
-                            deckGenerated = True
-                        deck = ShuffleWithSettings(deck, settings)
-                        shuffleButtonValue = True
-                """         
+                        elif button.name == "resetDeck":
+                            if button.value == False:
+                                deck = GenDeck(settings["deckSize"])
+                                deckGenerated = True
+                                button.value = True
+                         
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 if buttons["shuffle"].value == True:
                     buttons["shuffle"].value = False
                     buttons["shuffle"].valueIndex = 1
+                elif buttons["resetDeck"].value == True:
+                    buttons["resetDeck"].value = False
+                    buttons["resetDeck"].valueIndex = 1
     
     if mouse_held[0]:
         for slider in sliders.values():
@@ -294,27 +300,24 @@ while running:
                 slider.handle.x = max(slider.minX, min(slider.maxX, mouse_x - slider.handle.width // 2))
                 slider.value = (slider.handle.x - slider.minX) / (slider.maxX - slider.minX)
                 settings[slider.name] = slider.value
-    """
-    if shuffleButtonValue == False:
-        pygame.draw.rect(SCREEN, GREY, shuffleButton)
-    else:
-        pygame.draw.rect(SCREEN, DARK_GREY, shuffleButton)
-    """
+
     for slider in sliders.values():
         slider.draw(SCREEN, GREY, DARK_GREY)
     
     for button in buttons.values():
         if button.name == "shuffle":
             if button.value == False:
-                button.draw(SCREEN, GREY)
+                button.draw(SCREEN, GREY, 10, 10, 0, 0)
             else:
-                button.draw(SCREEN, DARK_GREY)
+                button.draw(SCREEN, DARK_GREY, 10, 15, 0, 0)
+        elif button.name == "resetDeck":
+            if button.value == False:
+                button.draw(SCREEN, GREY, 0, -25, 0, 0)
+            else:
+                button.draw(SCREEN, DARK_GREY, 0, 0, 0, 0)
         else:
-            button.draw(SCREEN, GREY)
-    """
-    pygame.draw.rect(SCREEN, GREY, accuracySlider)
-    pygame.draw.rect(SCREEN, DARK_GREY, accuracySliderHandle)
-    """
+            button.draw(SCREEN, GREY, 0, -25, 5, 0)
+            
     DisplayDeck(deck)
     pygame.display.flip()
     
