@@ -1,9 +1,8 @@
 import pygame
 import random
-import string
 
 pygame.init()
-SCREEN_WIDTH = 640
+SCREEN_WIDTH = 1138
 SCREEN_HEIGHT = 640
 SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Shuffling simulator")
@@ -24,6 +23,7 @@ clock = pygame.time.Clock()
 
 deckGenerated = False
 deck = []
+startDeck = []
 
 class Slider:
     def __init__(self, posX, posY, width, height, name):
@@ -75,7 +75,7 @@ settings = {
     "inOutRand": "o"
 }
 
-shuffles = ["riffleShuffle", "cutDeck", "computer"]
+shuffles = ["riffleShuffle", "cutDeck", "computer", "reverse"]
 
 sliders = {
     "accuracy": Slider((settingsTabX + 10), 100, 200, 25, "accuracy"),
@@ -135,14 +135,89 @@ def ShuffleWithSettings(deck, settings):
 
     elif settings["shuffle"] == "computer":
         return ComputerRandomShuffle(deck)
-
+    elif settings["shuffle"] == "reverse":
+        return ReverseDeck(deck)
     else:
         print("Unknown shuffle")
         return deck
 
+def AnalyzeRandomness(shuffledDeck, initialDeck):
+
+    absolutDistanceScore = AbsolutDistanceScore(shuffledDeck, initialDeck)
+    orderScore = OrderScore(shuffledDeck, initialDeck)
+    relativeDistanceScore = RelativeDistanceScore(shuffledDeck, initialDeck)
+    print("0=bad 1=good")
+    print("absolute distance score: ", absolutDistanceScore)
+    print("order score: ", orderScore)
+    print("relative distance score: ", relativeDistanceScore)
+    
+    return
+
+# How close the shuffled card is to 1/3 of the distance away from original position (the ideal distance for randomness).
+# 1 = 1/3 away on average, 0 = exact same positions. maximum distance is achieved by reversing cards.
+def AbsolutDistanceScore(shuffledDeck, initialDeck):
+    n = len(initialDeck)
+    
+    position = {card: i for i, card in enumerate(shuffledDeck)}
+    
+    totalDistance = 0
+    
+    for i, card in enumerate(initialDeck):
+        totalDistance += abs(i - position[card])
+        
+    meanDistance = totalDistance / n
+    expectedIdeal = n / 3
+    absolutDistanceScore = 1 - abs(meanDistance - expectedIdeal) / expectedIdeal
+    
+    return absolutDistanceScore
+
+def RelativeDistanceScore(shuffledDeck, initialDeck, k=6):
+    n = len(initialDeck)
+    position = {card: i for i, card in enumerate(shuffledDeck)}
+
+    total = 0
+    weightSum = 0
+
+    for i, card in enumerate(initialDeck):
+        for d in range(1, k + 1):
+            for j in (i - d, i + d):
+                if 0 <= j < n:
+                    weight = 1 / d
+                    total += weight * abs(abs(position[card] - position[initialDeck[j]]) - d)
+                    weightSum += weight
+
+    meanRelativeDistance = total / weightSum
+    expectedIdeal = n / 3
+
+    relativeDistanceScore = 1 - abs(meanRelativeDistance - expectedIdeal) / expectedIdeal
+    #relativeDistanceScore = min(1.0, relativeDistanceScore)
+    return relativeDistanceScore
+
+def OrderScore(shuffledDeck, initialDeck):
+    n = len(initialDeck)
+    position = {card: i for i, card in enumerate(shuffledDeck)}
+
+    preserved = 0
+    totalPairs = n * (n - 1) // 2
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if position[initialDeck[i]] < position[initialDeck[j]]:
+                preserved += 1
+
+    fraction = preserved / totalPairs
+    expectedIdeal = 1/2
+    orderScore = 1 - abs(fraction - expectedIdeal) / expectedIdeal
+    
+    return orderScore
+
 def ComputerRandomShuffle(deck):
     shuffledDeck = random.sample(deck, len(deck))
     return shuffledDeck
+
+def ReverseDeck(deck):
+    reversedDeck = deck[::-1]
+    return reversedDeck
 
 # Offset: 0.5 = deck split in 2 equal halves, Accuracy: 0.0 = deck cut point completly random 
 # and one half will go as a whole first then the other as  whole, 1.0 = deck cut point is exact 
@@ -153,7 +228,8 @@ def RiffleShuffle(deck, offset, accuracy, inOutRand):
     offset = max(0.0, min(1.0, offset))
     accuracy = max(0.0, min(1.0, accuracy))
     
-    cutIndex = CutIndex(n, offset, accuracy)
+    # Make the accuracy of the cut index to change between 90-100 accuracy since since the cut is ment to be done exactly at the middle
+    cutIndex = CutIndex(n, offset, (0.90 + 0.10 * accuracy))
     
     top = deck[cutIndex:]
     bottom = deck[:cutIndex]
@@ -169,27 +245,41 @@ def RiffleShuffle(deck, offset, accuracy, inOutRand):
         useTop = random.choice([True, False])
     
     shuffledDeck = []
-
+    cardsSinceSwitch = 0
+    
     while ti < len(top) or bi < len(bottom):
 
         # Change the deck half if the other is empty
         if useTop and ti >= len(top):
             useTop = False
+            cardsSinceSwitch = 0
         elif not useTop and bi >= len(bottom):
             useTop = True
+            cardsSinceSwitch = 0
 
-        # Move a card to the shuffled 
+        # Shuffle a card 
         if useTop and ti < len(top):
             shuffledDeck.append(top[ti])
             ti += 1
         elif not useTop and bi < len(bottom):
             shuffledDeck.append(bottom[bi])
             bi += 1
-
+        
+        decay_rate = 0.6
+        base = 1 - decay_rate * accuracy
+        k = 4   # Changes the shape of the curve that decides how low the switch_chance starts with 0 cards since switch
+        s = 0.1 # Multiplies the "0 cards since switch" swich_chancees starting chance.
+        startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
+        switch_chance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsSinceSwitch))
+        
         # Decide whether to change deck half
-        if random.random() < accuracy:
+        if random.random() < switch_chance:
             useTop = not useTop
-    print(offset)        
+            cardsSinceSwitch = 0
+        else:
+            cardsSinceSwitch += 1
+                
+    print("Offset: " + str(offset))        
     return shuffledDeck
 
 # Offset: 0.5 = deck split in 2 equal halves, Accuracy will decrease radially from the offset 
@@ -202,7 +292,7 @@ def CutDeck(deck, offset, accuracy):
     
     cutIndex = CutIndex(n, offset, accuracy)
     
-    print(cutIndex)
+    print("Cut index: " + str(cutIndex))
     top = deck[:cutIndex]
     bottom = deck[cutIndex:]
     
@@ -237,6 +327,7 @@ def CutIndex(n, offset, accuracy):
     return cutIndex
 
 deck = GenDeck(settings["deckSize"])
+startDeck = deck
 deckGenerated = True
 
 running = True
@@ -257,11 +348,14 @@ while running:
             if event.key == pygame.K_1:
                 if not deckGenerated:
                     deck = GenDeck(settings["deckSize"])
+                    startDeck = deck
                     deckGenerated = True
                 deck = ShuffleWithSettings(deck, settings)
+                AnalyzeRandomness(deck, startDeck)
 
             elif event.key == pygame.K_r:
                 deck = GenDeck(settings["deckSize"])
+                startDeck = deck
                 deckGenerated = True
 
             elif event.key == pygame.K_q:
@@ -274,14 +368,16 @@ while running:
                         if button.name == "shuffle":
                             if button.value == False:
                                 deck = ShuffleWithSettings(deck, settings)
+                                AnalyzeRandomness(deck, startDeck)
                                 button.value = True
                         elif button.name == "assignShuffle":
                             button.nextValue()
                             settings["shuffle"] = button.value
-                            print(button.value)
+                            print("Selected shuffle: " + str(button.value))
                         elif button.name == "resetDeck":
                             if button.value == False:
                                 deck = GenDeck(settings["deckSize"])
+                                startDeck = deck
                                 deckGenerated = True
                                 button.value = True
                          
