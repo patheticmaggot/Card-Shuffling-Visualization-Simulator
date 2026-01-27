@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 
 pygame.init()
 SCREEN_WIDTH = 1138
@@ -9,8 +10,8 @@ pygame.display.set_caption("Shuffling simulator")
 
 GREY = (135, 129, 128)
 DARK_GREY = (59, 56, 55)
-sliderNameFont = pygame.font.SysFont("Arial", 20)
-sliderValueFont = pygame.font.SysFont("Arial", 20)
+BLACK = (0, 0, 0)
+FONT = pygame.font.SysFont("Arial", 20)
 
 
 settingsTabWidth = 250
@@ -18,6 +19,7 @@ settingsTabHeight = SCREEN_HEIGHT
 settingsTabX = (SCREEN_WIDTH - settingsTabWidth)
 settingsTabY = 0
 settingsTab = pygame.Rect(settingsTabX, settingsTabY, settingsTabWidth, settingsTabHeight)
+
 
 clock = pygame.time.Clock()
 
@@ -37,8 +39,8 @@ class Slider:
     def draw(self, screen, color1, color2):
         pygame.draw.rect(screen, color1, self.slider)
         pygame.draw.rect(screen, color2, self.handle)
-        Draw_text(self.name, sliderNameFont, (0, 0, 0), (self.slider.x + 5), self.slider.y)
-        Draw_text(str(int(self.value * 100)) + "%", sliderValueFont, (0, 0, 0), (self.slider.x + self.slider.width), self.slider.y)
+        Draw_text(self.name, FONT, BLACK, (self.slider.x + 5), self.slider.y)
+        Draw_text(str(int(self.value * 100)) + "%", FONT, BLACK, (self.slider.x + self.slider.width), self.slider.y)
 
 class Button:
     def __init__(self, posX, posY, width, height, name, values, nameText, valueText):
@@ -58,13 +60,96 @@ class Button:
     def draw(self, screen, color, textNameX, textNameY, textValuex, textValueY):
         pygame.draw.rect(screen, color, self.button)
         if self.nameText and self.valueText:
-            Draw_text(self.name, sliderValueFont, (0, 0, 0), self.button.x + textNameX, self.button.y + textNameY)
-            Draw_text(str(self.value), sliderValueFont, (0, 0, 0), self.button.x + textValuex, self.button.y + textValueY)
+            Draw_text(self.name, FONT, BLACK, self.button.x + textNameX, self.button.y + textNameY)
+            Draw_text(str(self.value), FONT, BLACK, self.button.x + textValuex, self.button.y + textValueY)
         elif self.nameText and not self.valueText:
-            Draw_text(self.name, sliderValueFont, (0, 0, 0), self.button.x + textNameX, self.button.y + textNameY)
+            Draw_text(self.name, FONT, BLACK, self.button.x + textNameX, self.button.y + textNameY)
         elif not self.nameText and self.valueText:
-            Draw_text(str(self.value), sliderValueFont, (0, 0, 0), self.button.x + textValuex, self.button.y + textValueY)
-        
+            Draw_text(str(self.value), FONT, BLACK, self.button.x + textValuex, self.button.y + textValueY)
+
+class Score:
+    def __init__(self, shuffledDeck, initialDeck, w_order=0.3, w_abs=0.3, w_rel=0.4, eps=1e-9):
+        self.shuffledDeck = shuffledDeck
+        self.initialDeck = initialDeck
+        self.eps = eps
+
+        # weights
+        self.w_order = w_order
+        self.w_abs = w_abs
+        self.w_rel = w_rel
+
+        # compute individual scores
+        self.absoluteDistanceScore = self._absolute_distance_score()
+        self.relativeDistanceScore = self._relative_distance_score()
+        self.orderScore = self._order_score()
+
+        # compute total score
+        self.totalScore = self._total_score()
+
+    # ---------- total score ----------
+    def _total_score(self):
+        o = max(self.orderScore, self.eps)
+        a = max(self.absoluteDistanceScore, self.eps)
+        r = max(self.relativeDistanceScore, self.eps)
+
+        return math.exp(
+            self.w_order * math.log(o) +
+            self.w_abs   * math.log(a) +
+            self.w_rel   * math.log(r)
+        )
+
+    # ---------- component scores ----------
+    def _absolute_distance_score(self):
+        n = len(self.initialDeck)
+        position = {card: i for i, card in enumerate(self.shuffledDeck)}
+
+        totalDistance = 0
+        for i, card in enumerate(self.initialDeck):
+            totalDistance += abs(i - position[card])
+
+        meanDistance = totalDistance / n
+        expectedIdeal = n / 3
+
+        return 1 - abs(meanDistance - expectedIdeal) / expectedIdeal
+
+    def _relative_distance_score(self, k=6):
+        n = len(self.initialDeck)
+        position = {card: i for i, card in enumerate(self.shuffledDeck)}
+
+        total = 0
+        weightSum = 0
+
+        for i, card in enumerate(self.initialDeck):
+            for d in range(1, k + 1):
+                for j in (i - d, i + d):
+                    if 0 <= j < n:
+                        weight = 1 / d
+                        total += weight * abs(
+                            abs(position[card] - position[self.initialDeck[j]]) - d
+                        )
+                        weightSum += weight
+
+        meanRelativeDistance = total / weightSum
+        expectedIdeal = n / 3
+
+        return 1 - abs(meanRelativeDistance - expectedIdeal) / expectedIdeal
+
+    def _order_score(self):
+        n = len(self.initialDeck)
+        position = {card: i for i, card in enumerate(self.shuffledDeck)}
+
+        preserved = 0
+        totalPairs = n * (n - 1) // 2
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                if position[self.initialDeck[i]] < position[self.initialDeck[j]]:
+                    preserved += 1
+
+        fraction = preserved / totalPairs
+        expectedIdeal = 0.5
+
+        return 1 - abs(fraction - expectedIdeal) / expectedIdeal           
 
 settings = {
     "shuffle": "riffleShuffle",
@@ -97,6 +182,44 @@ def Draw_text(text, font, text_col, x, y):
 def GenDeck(n):
     deck = list(range(n))
     return deck
+
+def DisplayBySuit(deck):
+    
+    n = len(deck)
+    
+    
+    for i, c in enumerate(deck):
+        cardWidth = 100
+        cardHeight = 30
+        buffX = 100
+        buffY = 10
+        xPos = buffX
+        color = (0, 0, 0)
+        
+        
+        if cardHeight * n > SCREEN_HEIGHT:
+            cardHeight = SCREEN_HEIGHT // n
+        
+        if n == 1:
+            yPos = (SCREEN_HEIGHT - cardHeight) // 2
+        
+        else:
+            if c < n/4:
+                color = (0, 0, int(c * 250) / n)
+            elif c >= n/4 and c < n/2:
+                color = (0, int(c * 250) / n, 0)
+            elif c >= n/2 and c < 3*n/4:
+                color = (int(c * 250) / n, 0, 0)
+            else:
+                color = (int(c * 250) / n, int(c * 250) / n, 0)
+                
+            yPos = SCREEN_HEIGHT - (cardHeight * i) - buffY - cardHeight
+            
+            
+        rect = pygame.Rect(xPos, yPos, cardWidth, cardHeight)
+        pygame.draw.rect(SCREEN, color, rect)
+    
+    return
 
 def DisplayDeck(deck):
     
@@ -140,22 +263,17 @@ def ShuffleWithSettings(deck, settings):
     else:
         print("Unknown shuffle")
         return deck
-
+"""
 def AnalyzeRandomness(shuffledDeck, initialDeck):
-
-    absolutDistanceScore = AbsolutDistanceScore(shuffledDeck, initialDeck)
-    orderScore = OrderScore(shuffledDeck, initialDeck)
+    absoluteDistanceScore = AbsoluteDistanceScore(shuffledDeck, initialDeck)
     relativeDistanceScore = RelativeDistanceScore(shuffledDeck, initialDeck)
-    print("0=bad 1=good")
-    print("absolute distance score: ", absolutDistanceScore)
-    print("order score: ", orderScore)
-    print("relative distance score: ", relativeDistanceScore)
+    orderScore = OrderScore(shuffledDeck, initialDeck)
     
     return
 
 # How close the shuffled card is to 1/3 of the distance away from original position (the ideal distance for randomness).
 # 1 = 1/3 away on average, 0 = exact same positions. maximum distance is achieved by reversing cards.
-def AbsolutDistanceScore(shuffledDeck, initialDeck):
+def AbsoluteDistanceScore(shuffledDeck, initialDeck):
     n = len(initialDeck)
     
     position = {card: i for i, card in enumerate(shuffledDeck)}
@@ -210,7 +328,7 @@ def OrderScore(shuffledDeck, initialDeck):
     orderScore = 1 - abs(fraction - expectedIdeal) / expectedIdeal
     
     return orderScore
-
+"""
 def ComputerRandomShuffle(deck):
     shuffledDeck = random.sample(deck, len(deck))
     return shuffledDeck
@@ -327,6 +445,7 @@ def CutIndex(n, offset, accuracy):
     return cutIndex
 
 deck = GenDeck(settings["deckSize"])
+randomnessScore = Score(deck, deck)
 startDeck = deck
 deckGenerated = True
 
@@ -351,11 +470,13 @@ while running:
                     startDeck = deck
                     deckGenerated = True
                 deck = ShuffleWithSettings(deck, settings)
-                AnalyzeRandomness(deck, startDeck)
+                #AnalyzeRandomness(deck, startDeck)
+                randomnessScore = Score(deck, startDeck)
 
             elif event.key == pygame.K_r:
                 deck = GenDeck(settings["deckSize"])
                 startDeck = deck
+                randomnessScore = Score(deck, startDeck)
                 deckGenerated = True
 
             elif event.key == pygame.K_q:
@@ -368,7 +489,8 @@ while running:
                         if button.name == "shuffle":
                             if button.value == False:
                                 deck = ShuffleWithSettings(deck, settings)
-                                AnalyzeRandomness(deck, startDeck)
+                                #AnalyzeRandomness(deck, startDeck)
+                                randomnessScore = Score(deck, startDeck)
                                 button.value = True
                         elif button.name == "assignShuffle":
                             button.nextValue()
@@ -378,6 +500,7 @@ while running:
                             if button.value == False:
                                 deck = GenDeck(settings["deckSize"])
                                 startDeck = deck
+                                randomnessScore = Score(deck, startDeck)
                                 deckGenerated = True
                                 button.value = True
                          
@@ -414,7 +537,12 @@ while running:
         else:
             button.draw(SCREEN, GREY, 0, -25, 5, 0)
             
-    DisplayDeck(deck)
+    Draw_text("Total score: " + str(int(randomnessScore.totalScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 300)
+    Draw_text("Absolut distance score: " + str(int(randomnessScore.absoluteDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 320)
+    Draw_text("Relative distance score: " + str(int(randomnessScore.relativeDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 340)
+    Draw_text("Order score: " + str(int(randomnessScore.orderScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 360)
+    
+    DisplayBySuit(deck)
     pygame.display.flip()
     
     
