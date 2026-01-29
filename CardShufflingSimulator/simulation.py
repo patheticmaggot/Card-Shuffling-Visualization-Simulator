@@ -1,6 +1,7 @@
 import pygame
 import random
 import math
+import matplotlib.pyplot as plt
 
 pygame.init()
 SCREEN_WIDTH = 1138
@@ -11,6 +12,7 @@ pygame.display.set_caption("Shuffling simulator")
 GREY = (135, 129, 128)
 DARK_GREY = (59, 56, 55)
 BLACK = (0, 0, 0)
+RED = (255, 0, 0)
 FONT = pygame.font.SysFont("Arial", 20)
 
 
@@ -26,6 +28,9 @@ clock = pygame.time.Clock()
 deckGenerated = False
 deck = []
 startDeck = []
+
+SHUFFLES = ["riffleShuffle", "cutDeck", "computer", "reverse", "fisherYates"]
+SUITS = ["S", "D", "C", "H"]
 
 class Slider:
     def __init__(self, posX, posY, width, height, name):
@@ -68,73 +73,148 @@ class Button:
             Draw_text(str(self.value), FONT, BLACK, self.button.x + textValuex, self.button.y + textValueY)
 
 class Score:
-    def __init__(self, shuffledDeck, initialDeck, w_order=0.3, w_abs=0.3, w_rel=0.4, eps=1e-9):
+    def __init__(self, shuffledDeck, initialDeck, w_abs=0.25, w_rel=0.25, w_order=0.25, w_trend = 0.25, eps=1e-9):
         self.shuffledDeck = shuffledDeck
         self.initialDeck = initialDeck
         self.eps = eps
 
         # weights
-        self.w_order = w_order
         self.w_abs = w_abs
         self.w_rel = w_rel
+        self.w_order = w_order
+        self.w_trend = w_trend
 
         # compute individual scores
         self.absoluteDistanceScore = self._absolute_distance_score()
         self.relativeDistanceScore = self._relative_distance_score()
         self.orderScore = self._order_score()
+        self.trendScore = self._trend_score()
 
         # compute total score
         self.totalScore = self._total_score()
 
     # ---------- total score ----------
-    def _total_score(self):
-        o = max(self.orderScore, self.eps)
-        a = max(self.absoluteDistanceScore, self.eps)
-        r = max(self.relativeDistanceScore, self.eps)
+    def _total_score(self, p=-6):
+        """
+        Soft-min power mean aggregation.
 
-        return math.exp(
-            self.w_order * math.log(o) +
-            self.w_abs   * math.log(a) +
-            self.w_rel   * math.log(r)
-        )
+
+        p -> -inf : lähestyy min(scoret)
+        p = -1..-10: kuinka rankaiseva pieniä arvoja kohtaan
+        """
+
+
+        scores = [
+        self.absoluteDistanceScore,
+        self.relativeDistanceScore,
+        self.orderScore,
+        self.trendScore
+        ]
+
+
+        weights = [
+        self.w_abs,
+        self.w_rel,
+        self.w_order,
+        self.w_trend
+        ]
+
+
+        eps = self.eps
+        num = 0.0
+        den = 0.0
+
+
+        for s, w in zip(scores, weights):
+            s = max(s, eps) # estää nollan ja logiikka-ongelmat
+            num += w * (s ** p) # painotettu potenssi
+            den += w
+
+
+        return (num / den) ** (1 / p)
 
     # ---------- component scores ----------
+    
     def _absolute_distance_score(self):
-        n = len(self.initialDeck)
+        
+        """
+        Scores how close to the ideal distance away the cards are frm their original position in the initial deck
+        
+        - Expected ideal checked with simulations to be "n / 3"
+        - Returns score in [0, 1]
+        - 0 = cards on the same spots as in the original deck
+        - 1 = cards on average "n / 3" distance away from the original position
+        """
+        
+        n = len(self.initialDeck)   # Initial decks length
+        
+        # Create a dictionary to get the indexes of the shuffled numbers in the shuffled deck
         position = {card: i for i, card in enumerate(self.shuffledDeck)}
 
+        # Add up every distence between the initial position of the card and the shuffled position of that same card
         totalDistance = 0
         for i, card in enumerate(self.initialDeck):
             totalDistance += abs(i - position[card])
 
-        meanDistance = totalDistance / n
-        expectedIdeal = n / 3
-
-        return 1 - abs(meanDistance - expectedIdeal) / expectedIdeal
+        meanDistance = totalDistance / n    # Calculate mean
+        expectedIdeal = n / 3               # Use a precalculated expected ideal of the perfect shuffle as a standard for the score
+        absoluteDistanceScore = 1 - abs(meanDistance - expectedIdeal) / expectedIdeal # Score between 0 and 1. 1 = closest to ideal
+        
+        return absoluteDistanceScore
 
     def _relative_distance_score(self, k=6):
-        n = len(self.initialDeck)
+        
+        """
+        Scores every card on how far their neighbours have moved from their original neighbour spots
+        
+        - Weighted on how far the neighbour card is from the original
+        - k determines how far away do we chack the neighbours scores
+        - Returns score in [0, 1]
+        - 0 = every neighbour is on their original spot compared to the original
+        - 1 = Weighted neighbour distances on average are as close to the ideal expected distance tested with perfect shuffling
+        - Expected ideal checked with simulations to be "n / 3.357" for deck size 52 (bigger deck apraches to 3)
+        """
+        
+        n = len(self.initialDeck)   # Initial decks length
+        
+        # Create a dictionary to get the indexes of the shuffled numbers in the shuffled deck
         position = {card: i for i, card in enumerate(self.shuffledDeck)}
 
         total = 0
         weightSum = 0
 
+        # Iterate through every card in initial deck
         for i, card in enumerate(self.initialDeck):
-            for d in range(1, k + 1):
-                for j in (i - d, i + d):
-                    if 0 <= j < n:
-                        weight = 1 / d
-                        total += weight * abs(
-                            abs(position[card] - position[self.initialDeck[j]]) - d
-                        )
-                        weightSum += weight
+            for d in range(1, k + 1):       # Iterate trough every distance from the initial card between 1 card away to k cards away
+                for j in (i - d, i + d):    # Iterate trough the 2 dirctions for the distance
+                    if 0 <= j < n:          # Check to not go out of bounds
+                        weight = 1 / d      # Assign a weight to the card by how far it is from the original in the initial deck
+                        
+                        # Get the absolute distance between the original card in the shuffled deck, 
+                        # with the closest cards to it now in the shuffled deck. Then taking into account 
+                        # the distance to the orginal card and multipying that value with the weight it got 
+                        # from how far it is from the original card and adding that to the total
+                        total += weight * abs(abs(position[card] - position[self.initialDeck[j]]) - d)
+                        weightSum += weight # Adding up weights to use that instad of n to get accurate weights
 
-        meanRelativeDistance = total / weightSum
-        expectedIdeal = n / 3
+        
+        meanRelativeDistance = total / weightSum    # Geting the weighted mean of the relative distances
+        expectedIdeal = n / 3.357                   # Using a precalculated expected ideal of the perfect shuffle as a standard for the score
+        relativeDistanceScore = 1 - abs(meanRelativeDistance - expectedIdeal) / expectedIdeal   # Score between 0 and 1. 1 = closest to ideal
 
-        return 1 - abs(meanRelativeDistance - expectedIdeal) / expectedIdeal
+        return relativeDistanceScore
 
     def _order_score(self):
+        
+        """
+        Scores how much the cards have changed sides on average
+        
+        - Returns score in [0, 1]
+        - 0 = everything is in their original place or reversed.
+        - 1 = The ideal expectation for a randomly shuffled deck
+        
+        """
+        
         n = len(self.initialDeck)
         position = {card: i for i, card in enumerate(self.shuffledDeck)}
 
@@ -149,8 +229,54 @@ class Score:
         fraction = preserved / totalPairs
         expectedIdeal = 0.5
 
-        return 1 - abs(fraction - expectedIdeal) / expectedIdeal           
+        return 1 - abs(fraction - expectedIdeal) / expectedIdeal
+    
+    def _trend_score(self, shape=4.0):
+        """
+        Scores how strongly the deck exhibits long increasing or decreasing trends.
+        
+        - Any step size allowed to the same direction (ascending/descending) 
+        - Longer continuous trends contribute more weight starting from 2 steps (singles are not counted)
+        - Returns score in [0, 1]
+        """
+        n = len(self.initialDeck)
+        if n < 2:
+            return 0.0
 
+        total_score = 0.0
+        streakCutoff = 1
+        streak = 0
+        prev_dir = 0
+
+        for i in range(n - 1):
+            diff = self.shuffledDeck[i + 1] - self.shuffledDeck[i]
+
+            if diff > 0:
+                curr_dir = 1
+            elif diff < 0:
+                curr_dir = -1
+            else:
+                curr_dir = 0
+
+            if curr_dir != 0 and curr_dir == prev_dir:
+                streak += 1
+            elif curr_dir != 0:
+                streak = 1
+            else:
+                streak = 0
+
+            prev_dir = curr_dir
+            
+            if streak > streakCutoff:
+                total_score += streak
+
+
+        maxTrend = sum(i for i in range(streakCutoff + 1, n))
+        
+        trendScore = (1 - total_score / maxTrend) ** shape
+        
+        return trendScore
+    
 settings = {
     "shuffle": "riffleShuffle",
     "offset": 0.0,
@@ -160,8 +286,6 @@ settings = {
     "inOutRand": "o"
 }
 
-shuffles = ["riffleShuffle", "cutDeck", "computer", "reverse"]
-
 sliders = {
     "accuracy": Slider((settingsTabX + 10), 100, 200, 25, "accuracy"),
     "offset": Slider((settingsTabX + 10), 150, 200, 25, "offset"),
@@ -170,10 +294,67 @@ sliders = {
 
 buttons = {
     "shuffle": Button((settingsTabX + 10), (settingsTabHeight - 75), 75, 50, "shuffle", [False, True], True, False),
-    "assignShuffle": Button((settingsTabX + 10), (settingsTabY + 25), 100, 25, "assignShuffle", shuffles, True, True),
+    "assignShuffle": Button((settingsTabX + 10), (settingsTabY + 25), 100, 25, "assignShuffle", SHUFFLES, True, True),
     "resetDeck": Button((settingsTabX + 150), (settingsTabY + 25), 25, 25, "resetDeck", [False, True], True, False)
 }
 
+def expectedIdealSimulator(n, trials=1000):
+    initialDeck = list(range(n))
+    total1 = 0
+    power = 1.5
+    
+    values = []
+    
+    for _ in range(trials):
+        shuffledDeck = FisherYates(initialDeck)
+
+        
+        
+        if n < 2:
+            return 0.0
+
+        trendScore = 0.0
+
+        streak = 0
+        prev_dir = 0
+
+        for i in range(n - 1):
+            diff = shuffledDeck[i + 1] - shuffledDeck[i]
+
+            if diff > 0:
+                curr_dir = 1
+            elif diff < 0:
+                curr_dir = -1
+            else:
+                curr_dir = 0
+
+            if curr_dir != 0 and curr_dir == prev_dir:
+                streak += 1
+            elif curr_dir != 0:
+                streak = 1
+            else:
+                streak = 0
+
+            prev_dir = curr_dir
+            if streak > 1:
+                trendScore += streak ** power
+            
+        #expectedIdeal = 90
+        #trendScore1 = 1 - abs(trendScore - expectedIdeal) / expectedIdeal
+        values.append(trendScore)
+        
+        total1 += trendScore
+        
+        
+        print(trendScore)
+        
+    plt.hist(values, bins=50)
+    plt.show()
+    expectedMean = total1 / trials
+    return expectedMean
+
+def cardSuit(n):
+    return SUITS[n // 13]
 
 def Draw_text(text, font, text_col, x, y):
     img = font.render(text, True, text_col)
@@ -191,10 +372,11 @@ def DisplayBySuit(deck):
     for i, c in enumerate(deck):
         cardWidth = 100
         cardHeight = 30
-        buffX = 100
+        buffX = 150
         buffY = 10
         xPos = buffX
         color = (0, 0, 0)
+        #RGBvalue = #int(c * 250) // (n*4)
         
         
         if cardHeight * n > SCREEN_HEIGHT:
@@ -204,14 +386,14 @@ def DisplayBySuit(deck):
             yPos = (SCREEN_HEIGHT - cardHeight) // 2
         
         else:
-            if c < n/4:
-                color = (0, 0, int(c * 250) / n)
-            elif c >= n/4 and c < n/2:
-                color = (0, int(c * 250) / n, 0)
-            elif c >= n/2 and c < 3*n/4:
-                color = (int(c * 250) / n, 0, 0)
-            else:
-                color = (int(c * 250) / n, int(c * 250) / n, 0)
+            if cardSuit(c) == "S":
+                color = BLACK
+            elif cardSuit(c) == "D":
+                color = RED
+            elif cardSuit(c) == "C":
+                color = BLACK
+            elif cardSuit(c) == "H":
+                color = RED
                 
             yPos = SCREEN_HEIGHT - (cardHeight * i) - buffY - cardHeight
             
@@ -252,14 +434,14 @@ def DisplayDeck(deck):
 def ShuffleWithSettings(deck, settings):
     if settings["shuffle"] == "cutDeck":
         return CutDeck(deck, settings["offset"], settings["accuracy"])
-
     elif settings["shuffle"] == "riffleShuffle":
         return RiffleShuffle(deck, settings["offset"], settings["accuracy"], settings["inOutRand"])
-
     elif settings["shuffle"] == "computer":
         return ComputerRandomShuffle(deck)
     elif settings["shuffle"] == "reverse":
         return ReverseDeck(deck)
+    elif settings["shuffle"] == "fisherYates":
+        return FisherYates(deck)
     else:
         print("Unknown shuffle")
         return deck
@@ -418,6 +600,16 @@ def CutDeck(deck, offset, accuracy):
     
     return cutDeck
 
+def FisherYates(deck):
+    n = len(deck)
+    shuffledDeck = list(deck)
+    for i in range(n - 1, 0, -1):
+        j = random.randint(0, i)  # 0 ≤ j ≤ i
+        shuffledDeck[i], shuffledDeck[j] = shuffledDeck[j], shuffledDeck[i]
+    
+    return shuffledDeck
+    
+
 def CutIndex(n, offset, accuracy):
     targetCut = offset * n
 
@@ -503,7 +695,15 @@ while running:
                                 randomnessScore = Score(deck, startDeck)
                                 deckGenerated = True
                                 button.value = True
-                         
+                                #print("expectedIdeal: " + str(expectedIdealSimulator(52, 10000)))
+                                #"""
+                                lol = 2
+                                total = 0
+                                for i in range(50):
+                                    total += lol
+                                    lol += 1
+                                print(total)
+                                #"""
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 if buttons["shuffle"].value == True:
@@ -541,8 +741,10 @@ while running:
     Draw_text("Absolut distance score: " + str(int(randomnessScore.absoluteDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 320)
     Draw_text("Relative distance score: " + str(int(randomnessScore.relativeDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 340)
     Draw_text("Order score: " + str(int(randomnessScore.orderScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 360)
+    Draw_text("Trend score: " + str(int(randomnessScore.trendScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 380)
     
     DisplayBySuit(deck)
+    DisplayDeck(deck)
     pygame.display.flip()
     
     
