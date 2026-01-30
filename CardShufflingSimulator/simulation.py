@@ -73,7 +73,7 @@ class Button:
             Draw_text(str(self.value), FONT, BLACK, self.button.x + textValuex, self.button.y + textValueY)
 
 class Score:
-    def __init__(self, shuffledDeck, initialDeck, w_abs=0.25, w_rel=0.25, w_order=0.25, w_trend = 0.25, eps=1e-9):
+    def __init__(self, shuffledDeck, initialDeck, eps=1e-9, w_abs=0.25, w_rel=0.25, w_order=0.25, w_cons = 0.25, w_step = 0.25):
         self.shuffledDeck = shuffledDeck
         self.initialDeck = initialDeck
         self.eps = eps
@@ -82,13 +82,15 @@ class Score:
         self.w_abs = w_abs
         self.w_rel = w_rel
         self.w_order = w_order
-        self.w_trend = w_trend
+        self.w_cons = w_cons
+        self.w_step = w_step
 
         # compute individual scores
         self.absoluteDistanceScore = self._absolute_distance_score()
         self.relativeDistanceScore = self._relative_distance_score()
         self.orderScore = self._order_score()
-        self.trendScore = self._trend_score()
+        self.consecutiveTrendScore = self._consecutive_trend_score()
+        self.steppedTrendScore = self._stepped_trend_score()
 
         # compute total score
         self.totalScore = self._total_score()
@@ -108,7 +110,8 @@ class Score:
         self.absoluteDistanceScore,
         self.relativeDistanceScore,
         self.orderScore,
-        self.trendScore
+        self.consecutiveTrendScore,
+        self.steppedTrendScore
         ]
 
 
@@ -116,7 +119,8 @@ class Score:
         self.w_abs,
         self.w_rel,
         self.w_order,
-        self.w_trend
+        self.w_cons,
+        self.w_step
         ]
 
 
@@ -231,13 +235,16 @@ class Score:
 
         return 1 - abs(fraction - expectedIdeal) / expectedIdeal
     
-    def _trend_score(self, shape=4.0):
+    def _consecutive_trend_score(self, shape=8.0):
         """
         Scores how strongly the deck exhibits long increasing or decreasing trends.
         
         - Any step size allowed to the same direction (ascending/descending) 
         - Longer continuous trends contribute more weight starting from 2 steps (singles are not counted)
+        - Shape determines how exponentially punnnishing longer trends are
         - Returns score in [0, 1]
+        - 0 = whole deck is escending or descending
+        - 1 = every card changes trend diretion
         """
         n = len(self.initialDeck)
         if n < 2:
@@ -277,6 +284,50 @@ class Score:
         
         return trendScore
     
+    def _stepped_trend_score(self):
+        
+        n = len(self.shuffledDeck)
+        product = 1.0
+        
+        maxStep = int(n)
+        
+        for step in range(2, maxStep - 1):
+            
+            weight = 1.0 / (step - 1)
+                
+            positions = range(0, n, step)
+            steppedValues = [self.shuffledDeck[i] for i in positions]
+
+            stepN = len(steppedValues)
+            
+            if stepN < 3:
+                continue
+            
+            ascendingPairs = 0
+            descendingPairs = 0
+            
+            for i in range(stepN - 1):
+                if steppedValues[i + 1] == steppedValues[i] + 1:
+                    ascendingPairs += 1
+                elif steppedValues[i + 1] == steppedValues[i] - 1:
+                    descendingPairs += 1
+
+            ascendingFraction = ascendingPairs / (stepN - 1)
+            descendingFraction = descendingPairs / (stepN - 1)
+            
+            product *= (1.0 - ascendingFraction) ** weight
+            product *= (1.0 - descendingFraction) ** weight
+            
+        score = product
+        
+        return score
+    """
+    def modulo_ordered(deck, mod):
+        groups = {}
+        for card in deck:
+            groups.setdefault(card % mod, []).append(card)
+        return any(group == sorted(group) for group in groups.values())
+    """
 settings = {
     "shuffle": "riffleShuffle",
     "offset": 0.0,
@@ -684,6 +735,7 @@ while running:
                                 #AnalyzeRandomness(deck, startDeck)
                                 randomnessScore = Score(deck, startDeck)
                                 button.value = True
+                                randomnessScore._stepped_trend_score()
                         elif button.name == "assignShuffle":
                             button.nextValue()
                             settings["shuffle"] = button.value
@@ -696,14 +748,6 @@ while running:
                                 deckGenerated = True
                                 button.value = True
                                 #print("expectedIdeal: " + str(expectedIdealSimulator(52, 10000)))
-                                #"""
-                                lol = 2
-                                total = 0
-                                for i in range(50):
-                                    total += lol
-                                    lol += 1
-                                print(total)
-                                #"""
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 if buttons["shuffle"].value == True:
@@ -741,7 +785,8 @@ while running:
     Draw_text("Absolut distance score: " + str(int(randomnessScore.absoluteDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 320)
     Draw_text("Relative distance score: " + str(int(randomnessScore.relativeDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 340)
     Draw_text("Order score: " + str(int(randomnessScore.orderScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 360)
-    Draw_text("Trend score: " + str(int(randomnessScore.trendScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 380)
+    Draw_text("Consecutive trend score: " + str(int(randomnessScore.consecutiveTrendScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 380)
+    Draw_text("Stepped trend score: " + str(int(randomnessScore.steppedTrendScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 400)
     
     DisplayBySuit(deck)
     DisplayDeck(deck)
