@@ -98,11 +98,14 @@ class Score:
     # ---------- total score ----------
     def _total_score(self, p=-6):
         """
-        Soft-min power mean aggregation.
-
-
-        p -> -inf : lähestyy min(scoret)
-        p = -1..-10: kuinka rankaiseva pieniä arvoja kohtaan
+        Combines the other scores to one score.
+        
+        - Total score gets punished hard if one score is bad
+        - p determines how hard small scores punish the total
+        - The scores have tunable weights to contol their importance
+        - Returns score in [0, 1]
+        - 0 = Atleast one of the scores in 0
+        - 1 = All of the scores are 1
         """
 
 
@@ -144,6 +147,7 @@ class Score:
         """
         Scores how close to the ideal distance away the cards are frm their original position in the initial deck
         
+        - Scores the shuffled deck compared to the initial deck
         - Expected ideal checked with simulations to be "n / 3"
         - Returns score in [0, 1]
         - 0 = cards on the same spots as in the original deck
@@ -171,8 +175,9 @@ class Score:
         """
         Scores every card on how far their neighbours have moved from their original neighbour spots
         
-        - Weighted on how far the neighbour card is from the original
-        - k determines how far away do we chack the neighbours scores
+        - Scores the shuffled deck compared to the initial deck
+        - Weighted on how far the neighbour card is from the original spot as the originals neighbour
+        - k determines how far away do we chack the neighbours
         - Returns score in [0, 1]
         - 0 = every neighbour is on their original spot compared to the original
         - 1 = Weighted neighbour distances on average are as close to the ideal expected distance tested with perfect shuffling
@@ -213,6 +218,7 @@ class Score:
         """
         Scores how much the cards have changed sides on average
         
+        - Scores the shuffled deck compared to the initial deck
         - Returns score in [0, 1]
         - 0 = everything is in their original place or reversed.
         - 1 = The ideal expectation for a randomly shuffled deck
@@ -239,12 +245,13 @@ class Score:
         """
         Scores how strongly the deck exhibits long increasing or decreasing trends.
         
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
         - Any step size allowed to the same direction (ascending/descending) 
-        - Longer continuous trends contribute more weight starting from 2 steps (singles are not counted)
-        - Shape determines how exponentially punnnishing longer trends are
+        - Longer continuous trends contribute more weight with minimum length being 2 step trend
+        - Shape variable determines how exponentially punishing longer trends are
         - Returns score in [0, 1]
-        - 0 = whole deck is escending or descending
-        - 1 = every card changes trend diretion
+        - 0 = whole deck is ascending or descending
+        - 1 = after every card the trend direction changes
         """
         n = len(self.initialDeck)
         if n < 2:
@@ -286,10 +293,23 @@ class Score:
     
     def _stepped_trend_score(self):
         
+        """
+        Scores how much the deck avoids rising or decending patterns every other, every 3rd, every 4th etc. card.
+        
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
+        - Looks at only a step size of 1 (ascending/descending) 
+        - Longer continuous patterns contribute more weight with minimum length being 2 step trend
+        - The smaller the jump over cards is the more its weght on the final score. every other weighing the most
+        - Returns score in [0, 1]
+        - 0 = Atleast one pattern between every other to every n:th spans the whole deck lenght 
+            (example: every 4th card is going [1, 2, 3, 4, 5...] through the whole deck)
+        - 1 = none of the patterns we try to search for have a rising nor decending pattern for more than 2 cards
+        """
+        
         n = len(self.shuffledDeck)
         product = 1.0
         
-        maxStep = int(n)
+        maxStep = int(n/2)
         
         for step in range(2, maxStep - 1):
             
@@ -321,13 +341,7 @@ class Score:
         score = product
         
         return score
-    """
-    def modulo_ordered(deck, mod):
-        groups = {}
-        for card in deck:
-            groups.setdefault(card % mod, []).append(card)
-        return any(group == sorted(group) for group in groups.values())
-    """
+    
 settings = {
     "shuffle": "riffleShuffle",
     "offset": 0.0,
