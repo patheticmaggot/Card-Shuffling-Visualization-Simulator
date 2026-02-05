@@ -31,6 +31,8 @@ startDeck = []
 
 SHUFFLES = ["Riffle Shuffle", 
             "Milk Shuffle", 
+            "Overhand Shuffle", 
+            "Over-Under Shuffle", 
             "Cut Deck", 
             "Reverse Cards", 
             "Computer Shuffle", 
@@ -352,21 +354,19 @@ settings = {
     "shuffle": "Riffle Shuffle",
     "offset": 0.0,
     "accuracy": 0.0,
-    "randomness": 0.0,
     "deckSize": 52,
-    "inOutRand": "o"
+    "inOutRand": "r"
 }
 
 sliders = {
-    "accuracy": Slider((settingsTabX + 10), 100, 200, 25, "accuracy"),
-    "offset": Slider((settingsTabX + 10), 150, 200, 25, "offset"),
-    #"randomness": Slider((settingsTabX + 10), 200, 200, 25, "randomness")
+    "accuracy": Slider((settingsTabX + 10), settingsTabHeight - 220, 200, 25, "accuracy"),
+    "offset": Slider((settingsTabX + 10), settingsTabHeight - 180, 200, 25, "offset"),
 }
 
 buttons = {
-    "shuffle": Button((settingsTabX + 10), (settingsTabHeight - 75), 75, 50, "shuffle", [False, True], True, False),
-    "assignShuffle": Button((settingsTabX + 10), (settingsTabY + 25), 100, 25, "assignShuffle", SHUFFLES, True, True),
-    "resetDeck": Button((settingsTabX + 150), (settingsTabY + 25), 25, 25, "resetDeck", [False, True], True, False)
+    "shuffle": Button((settingsTabX + 20), (settingsTabHeight - 75), 75, 50, "shuffle", [False, True], True, False),
+    "assign shuffle": Button((settingsTabX + 10), (settingsTabHeight - 120), 200, 25, "assign shuffle", SHUFFLES, True, True),
+    "reset": Button((settingsTabX + 150), (settingsTabHeight - 75), 75, 50, "reset", [False, True], True, False)
 }
 
 def expectedIdealSimulator(n, trials=1000):
@@ -515,16 +515,18 @@ def ShuffleWithSettings(deck, settings):
         return FisherYates(deck)
     elif settings["shuffle"] == "Milk Shuffle":
         return MilkShuffle(deck, settings["accuracy"])
+    elif settings["shuffle"] == "Overhand Shuffle":
+        return OverhandShuffle(deck, settings["accuracy"])
+    elif settings["shuffle"] == "Over-Under Shuffle":
+        return OverUnderShuffle(deck, settings["accuracy"], settings["inOutRand"])
     else:
         print("Unknown shuffle")
         return deck
 
 def MilkShuffle(deck, accuracy):
     
-    n = len(deck)
-    k = 2
     accuracy = max(0.0, min(1.0, accuracy))
-    initialDeck = deck[:] # working with a copy
+    initialDeck = deck[:]
     shuffledDeck = []
     
     decay_rate = 0.6
@@ -535,34 +537,118 @@ def MilkShuffle(deck, accuracy):
     
     while initialDeck:
         
-        
+        clump = []
         endingChance = 0
+        cardsTaken = 0
         
-        bottomCardsTaken = 0
         while random.random() > endingChance:
-            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** bottomCardsTaken))
-            shuffledDeck.append(initialDeck[0])
-            initialDeck.pop(0)
-            bottomCardsTaken += 1
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop(0))
+            cardsTaken += 1
             
             if not initialDeck:
                 endingChance = 1
+                
+        shuffledDeck.extend(clump)
         
         
         if not initialDeck:
             break
-        else:
-            endingChance = 0
         
-        topCardsTaken = 0
+        
+        
+        clump = []
+        endingChance = 0
+        cardsTaken = 0
+        
         while random.random() > endingChance:
-            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** topCardsTaken))
-            shuffledDeck.append(initialDeck[-1])
-            initialDeck.pop()
-            topCardsTaken += 1
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop())
+            cardsTaken += 1
             
             if not initialDeck:
                 endingChance = 1
+                
+        shuffledDeck.extend(reversed(clump))
+        
+    return shuffledDeck
+
+def OverhandShuffle(deck, accuracy):
+    
+    accuracy = max(0.0, min(1.0, accuracy))
+    initialDeck = deck[:]
+    shuffledDeck = []
+    
+    decay_rate = 0.6
+    base = 1 - decay_rate * accuracy
+    k = 4
+    s = 0.1
+    startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
+    
+    while initialDeck:
+        
+        clump = []
+        endingChance = 0
+        cardsTaken = 0
+        
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop())
+            cardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
+        
+        shuffledDeck.extend(reversed(clump))
+    
+    return shuffledDeck
+
+def OverUnderShuffle(deck, accuracy, inOutRand):
+    
+    accuracy = max(0.0, min(1.0, accuracy))
+    initialDeck = deck[:]
+    shuffledDeck = []
+    
+    if (inOutRand == "i"):
+        useTop = True
+    elif (inOutRand == "o"):
+        useTop = False
+    else:
+        useTop = random.choice([True, False])
+        
+    decay_rate = 0.6
+    base = 1 - decay_rate * accuracy
+    k = 4
+    s = 0.1
+    startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
+    
+    while initialDeck:
+        
+        clump = []
+        endingChance = 0
+        cardsTaken = 0
+        
+        
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop())
+            cardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
+        
+        if useTop:
+            shuffledDeck.extend(reversed(clump))
+        else:
+            shuffledDeck[0:0] = reversed(clump)
+        
+        useTop = not useTop
+            
+        
     
     return shuffledDeck
 
@@ -722,7 +808,6 @@ while running:
                     startDeck = deck
                     deckGenerated = True
                 deck = ShuffleWithSettings(deck, settings)
-                #AnalyzeRandomness(deck, startDeck)
                 randomnessScore = Score(deck, startDeck)
 
             elif event.key == pygame.K_r:
@@ -741,15 +826,14 @@ while running:
                         if button.name == "shuffle":
                             if button.value == False:
                                 deck = ShuffleWithSettings(deck, settings)
-                                #AnalyzeRandomness(deck, startDeck)
                                 randomnessScore = Score(deck, startDeck)
                                 button.value = True
                                 randomnessScore._stepped_trend_score()
-                        elif button.name == "assignShuffle":
+                        elif button.name == "assign shuffle":
                             button.nextValue()
                             settings["shuffle"] = button.value
                             print("Selected shuffle: " + str(button.value))
-                        elif button.name == "resetDeck":
+                        elif button.name == "reset":
                             if button.value == False:
                                 deck = GenDeck(settings["deckSize"])
                                 startDeck = deck
@@ -762,9 +846,9 @@ while running:
                 if buttons["shuffle"].value == True:
                     buttons["shuffle"].value = False
                     buttons["shuffle"].valueIndex = 1
-                elif buttons["resetDeck"].value == True:
-                    buttons["resetDeck"].value = False
-                    buttons["resetDeck"].valueIndex = 1
+                elif buttons["reset"].value == True:
+                    buttons["reset"].value = False
+                    buttons["reset"].valueIndex = 1
     
     if mouse_held[0]:
         for slider in sliders.values():
@@ -782,20 +866,20 @@ while running:
                 button.draw(SCREEN, GREY, 10, 10, 0, 0)
             else:
                 button.draw(SCREEN, DARK_GREY, 10, 15, 0, 0)
-        elif button.name == "resetDeck":
+        elif button.name == "reset":
             if button.value == False:
-                button.draw(SCREEN, GREY, 0, -25, 0, 0)
+                button.draw(SCREEN, GREY, 10, 10, 0, 0)
             else:
-                button.draw(SCREEN, DARK_GREY, 0, 0, 0, 0)
+                button.draw(SCREEN, DARK_GREY, 10, 15, 0, 0)
         else:
             button.draw(SCREEN, GREY, 0, -25, 5, 0)
             
-    Draw_text("Total score: " + str(int(randomnessScore.totalScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 300)
-    Draw_text("Absolut distance score: " + str(int(randomnessScore.absoluteDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 320)
-    Draw_text("Relative distance score: " + str(int(randomnessScore.relativeDistanceScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 340)
-    Draw_text("Order score: " + str(int(randomnessScore.orderScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 360)
-    Draw_text("Consecutive trend score: " + str(int(randomnessScore.consecutiveTrendScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 380)
-    Draw_text("Stepped trend score: " + str(int(randomnessScore.steppedTrendScore * 100)) + "%", FONT, BLACK, settingsTabX + 10, settingsTabY + 400)
+    Draw_text(str(int(randomnessScore.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 10)
+    Draw_text(str(int(randomnessScore.absoluteDistanceScore * 100)) + "% :Absolut distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 30)
+    Draw_text(str(int(randomnessScore.relativeDistanceScore * 100)) + "% :Relative distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 50)
+    Draw_text(str(int(randomnessScore.orderScore * 100)) + "% :Order score", FONT, BLACK, settingsTabX + 10, settingsTabY + 70)
+    Draw_text(str(int(randomnessScore.consecutiveTrendScore * 100)) + "% :Consecutive trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 90)
+    Draw_text(str(int(randomnessScore.steppedTrendScore * 100)) + "% :Stepped trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 110)
     
     DisplayBySuit(deck)
     DisplayDeck(deck)
