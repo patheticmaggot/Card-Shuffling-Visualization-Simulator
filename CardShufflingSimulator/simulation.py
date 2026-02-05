@@ -29,7 +29,13 @@ deckGenerated = False
 deck = []
 startDeck = []
 
-SHUFFLES = ["riffleShuffle", "cutDeck", "computer", "reverse", "fisherYates"]
+SHUFFLES = ["Riffle Shuffle", 
+            "Milk Shuffle", 
+            "Cut Deck", 
+            "Reverse Cards", 
+            "Computer Shuffle", 
+            "Fisher-Yates Shuffle"]
+
 SUITS = ["S", "D", "C", "H"]
 
 class Slider:
@@ -343,7 +349,7 @@ class Score:
         return score
     
 settings = {
-    "shuffle": "riffleShuffle",
+    "shuffle": "Riffle Shuffle",
     "offset": 0.0,
     "accuracy": 0.0,
     "randomness": 0.0,
@@ -497,97 +503,76 @@ def DisplayDeck(deck):
     return
 
 def ShuffleWithSettings(deck, settings):
-    if settings["shuffle"] == "cutDeck":
+    if settings["shuffle"] == "Cut Deck":
         return CutDeck(deck, settings["offset"], settings["accuracy"])
-    elif settings["shuffle"] == "riffleShuffle":
+    elif settings["shuffle"] == "Riffle Shuffle":
         return RiffleShuffle(deck, settings["offset"], settings["accuracy"], settings["inOutRand"])
-    elif settings["shuffle"] == "computer":
+    elif settings["shuffle"] == "Computer Shuffle":
         return ComputerRandomShuffle(deck)
-    elif settings["shuffle"] == "reverse":
+    elif settings["shuffle"] == "Reverse Cards":
         return ReverseDeck(deck)
-    elif settings["shuffle"] == "fisherYates":
+    elif settings["shuffle"] == "Fisher-Yates Shuffle":
         return FisherYates(deck)
+    elif settings["shuffle"] == "Milk Shuffle":
+        return MilkShuffle(deck, settings["accuracy"])
     else:
         print("Unknown shuffle")
         return deck
-"""
-def AnalyzeRandomness(shuffledDeck, initialDeck):
-    absoluteDistanceScore = AbsoluteDistanceScore(shuffledDeck, initialDeck)
-    relativeDistanceScore = RelativeDistanceScore(shuffledDeck, initialDeck)
-    orderScore = OrderScore(shuffledDeck, initialDeck)
-    
-    return
 
-# How close the shuffled card is to 1/3 of the distance away from original position (the ideal distance for randomness).
-# 1 = 1/3 away on average, 0 = exact same positions. maximum distance is achieved by reversing cards.
-def AbsoluteDistanceScore(shuffledDeck, initialDeck):
-    n = len(initialDeck)
+def MilkShuffle(deck, accuracy):
     
-    position = {card: i for i, card in enumerate(shuffledDeck)}
+    n = len(deck)
+    k = 2
+    accuracy = max(0.0, min(1.0, accuracy))
+    initialDeck = deck[:] # working with a copy
+    shuffledDeck = []
     
-    totalDistance = 0
+    decay_rate = 0.6
+    base = 1 - decay_rate * accuracy
+    k = 4
+    s = 0.1
+    startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
     
-    for i, card in enumerate(initialDeck):
-        totalDistance += abs(i - position[card])
+    while initialDeck:
         
-    meanDistance = totalDistance / n
-    expectedIdeal = n / 3
-    absolutDistanceScore = 1 - abs(meanDistance - expectedIdeal) / expectedIdeal
+        
+        endingChance = 0
+        
+        bottomCardsTaken = 0
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** bottomCardsTaken))
+            shuffledDeck.append(initialDeck[0])
+            initialDeck.pop(0)
+            bottomCardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
+        
+        
+        if not initialDeck:
+            break
+        else:
+            endingChance = 0
+        
+        topCardsTaken = 0
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** topCardsTaken))
+            shuffledDeck.append(initialDeck[-1])
+            initialDeck.pop()
+            topCardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
     
-    return absolutDistanceScore
-
-def RelativeDistanceScore(shuffledDeck, initialDeck, k=6):
-    n = len(initialDeck)
-    position = {card: i for i, card in enumerate(shuffledDeck)}
-
-    total = 0
-    weightSum = 0
-
-    for i, card in enumerate(initialDeck):
-        for d in range(1, k + 1):
-            for j in (i - d, i + d):
-                if 0 <= j < n:
-                    weight = 1 / d
-                    total += weight * abs(abs(position[card] - position[initialDeck[j]]) - d)
-                    weightSum += weight
-
-    meanRelativeDistance = total / weightSum
-    expectedIdeal = n / 3
-
-    relativeDistanceScore = 1 - abs(meanRelativeDistance - expectedIdeal) / expectedIdeal
-    #relativeDistanceScore = min(1.0, relativeDistanceScore)
-    return relativeDistanceScore
-
-def OrderScore(shuffledDeck, initialDeck):
-    n = len(initialDeck)
-    position = {card: i for i, card in enumerate(shuffledDeck)}
-
-    preserved = 0
-    totalPairs = n * (n - 1) // 2
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if position[initialDeck[i]] < position[initialDeck[j]]:
-                preserved += 1
-
-    fraction = preserved / totalPairs
-    expectedIdeal = 1/2
-    orderScore = 1 - abs(fraction - expectedIdeal) / expectedIdeal
-    
-    return orderScore
-"""
-def ComputerRandomShuffle(deck):
-    shuffledDeck = random.sample(deck, len(deck))
     return shuffledDeck
 
-def ReverseDeck(deck):
-    reversedDeck = deck[::-1]
-    return reversedDeck
-
-# Offset: 0.5 = deck split in 2 equal halves, Accuracy: 0.0 = deck cut point completly random 
-# and one half will go as a whole first then the other as  whole, 1.0 = deck cut point is exact 
-# and the halves will deposit exactly one card one after the other
 def RiffleShuffle(deck, offset, accuracy, inOutRand):
+    """
+    Offset: 0.5 = deck split in 2 equal halves, Accuracy: 0.0 = deck cut point completly random 
+    and one half will go as a whole first then the other as  whole, 1.0 = deck cut point is exact 
+    and the halves will deposit exactly one card one after the other
+    """
+    
     n = len(deck)
     
     offset = max(0.0, min(1.0, offset))
@@ -644,12 +629,15 @@ def RiffleShuffle(deck, offset, accuracy, inOutRand):
         else:
             cardsSinceSwitch += 1
                 
-    print("Offset: " + str(offset))        
+    #print("Offset: " + str(offset))        
     return shuffledDeck
 
-# Offset: 0.5 = deck split in 2 equal halves, Accuracy will decrease radially from the offset 
-# point from 1 untill completly random at 0
 def CutDeck(deck, offset, accuracy):
+    """
+    Offset: 0.5 = deck split in 2 equal halves, Accuracy will decrease radially from the offset 
+    point from 1 untill completly random at 0
+    """
+    
     n = len(deck)
     
     offset = max(0.0, min(1.0, offset))
@@ -673,7 +661,14 @@ def FisherYates(deck):
         shuffledDeck[i], shuffledDeck[j] = shuffledDeck[j], shuffledDeck[i]
     
     return shuffledDeck
-    
+
+def ComputerRandomShuffle(deck):
+    shuffledDeck = random.sample(deck, len(deck))
+    return shuffledDeck
+
+def ReverseDeck(deck):
+    reversedDeck = deck[::-1]
+    return reversedDeck
 
 def CutIndex(n, offset, accuracy):
     targetCut = offset * n
