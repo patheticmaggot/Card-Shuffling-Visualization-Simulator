@@ -12,7 +12,11 @@ pygame.display.set_caption("Shuffling simulator")
 GREY = (135, 129, 128)
 DARK_GREY = (59, 56, 55)
 BLACK = (0, 0, 0)
+LESS_BLACK = (20, 20, 20)
 RED = (255, 0, 0)
+LESS_RED = (255, 60, 60)
+BACKGROUND_COLOR = (97, 125, 12)
+SETTINGSTAB_COLOR = (50, 50, 50)
 FONT = pygame.font.SysFont("Arial", 20)
 
 
@@ -28,6 +32,7 @@ clock = pygame.time.Clock()
 deckGenerated = False
 deck = []
 startDeck = []
+deckHistory = []
 
 SHUFFLES = ["Riffle Shuffle", 
             "Milk Shuffle", 
@@ -39,6 +44,7 @@ SHUFFLES = ["Riffle Shuffle",
             "Fisher-Yates Shuffle"]
 
 SUITS = ["S", "D", "C", "H"]
+RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 
 class Slider:
     def __init__(self, posX, posY, width, height, name):
@@ -355,7 +361,7 @@ settings = {
     "offset": 0.0,
     "accuracy": 0.0,
     "deckSize": 52,
-    "inOutRand": "r"
+    "inOutRand": "o"
 }
 
 sliders = {
@@ -368,6 +374,7 @@ buttons = {
     "assign shuffle": Button((settingsTabX + 10), (settingsTabHeight - 120), 200, 25, "assign shuffle", SHUFFLES, True, True),
     "reset": Button((settingsTabX + 150), (settingsTabHeight - 75), 75, 50, "reset", [False, True], True, False)
 }
+
 
 def expectedIdealSimulator(n, trials=1000):
     initialDeck = list(range(n))
@@ -425,29 +432,104 @@ def expectedIdealSimulator(n, trials=1000):
     return expectedMean
 
 def cardSuit(n):
+    n = n % 52
     return SUITS[n // 13]
+
+def cardRank(n):
+    n = n % 52
+    return RANKS[n % 13]
 
 def Draw_text(text, font, text_col, x, y):
     img = font.render(text, True, text_col)
     SCREEN.blit(img, (x, y))
 
-def GenDeck(n):
+def InitializeDeck(n):
     deck = list(range(n))
-    return deck
+    startDeck = deck.copy()
+    score = Score(deck, deck)
+    
+    deckHistory = [{
+    "deck": deck.copy(),
+    "shuffle": "initial",
+    "settings": settings.copy(),
+    "score": score
+    }]
+    
+    
+    return deck, startDeck, deckHistory, score
 
-def DisplayBySuit(deck):
+
+def DisplayDeckHistory(deckHistory, DisplayType):
+    
+    xPos = 10
+    gapWidth = 0
+    historySize = len(deckHistory)
+    gapAmount = historySize - 1
+    displayArea = SCREEN_WIDTH - settingsTabWidth - xPos
+    
+    if historySize * 100 + gapAmount * gapWidth + xPos > displayArea:
+        width = (displayArea - gapAmount * gapWidth) // historySize
+    else:
+        width = 100
+    
+    for i in deckHistory:
+        if DisplayType == "Order":
+            DisplayByOrder(i["deck"], xPos, width)
+        elif DisplayType == "Suit":
+            DisplayBySuit(i["deck"], xPos, width)
+        elif DisplayType == "Rank":
+            DisplayByRank(i["deck"], xPos, width)
+        
+        xPos += (width + gapWidth)
+        
+    return
+
+def DisplayByRank(deck, xPos, width):
+        
+    n = len(deck)
+    
+    
+    for i, c in enumerate(deck):
+        cardWidth = width
+        cardHeight = 30
+        buffX = xPos
+        buffY = 10
+        xPos = buffX
+        color = (0, 0, 0)
+        
+        
+        if cardHeight * n > SCREEN_HEIGHT:
+            cardHeight = SCREEN_HEIGHT // n
+        
+        if n == 1:
+            yPos = (SCREEN_HEIGHT - cardHeight) // 2
+        
+        else:
+            
+            index = RANKS.index(cardRank(c))
+            shade = (12 - index) * 20
+            color = (shade, shade, shade)
+                
+            yPos = SCREEN_HEIGHT - (cardHeight * i) - buffY - cardHeight
+            
+            
+        rect = pygame.Rect(xPos, yPos, cardWidth, cardHeight)
+        pygame.draw.rect(SCREEN, color, rect)
+    
+    return
+
+def DisplayBySuit(deck, xPos, width):
     
     n = len(deck)
     
     
     for i, c in enumerate(deck):
-        cardWidth = 100
+        cardWidth = width
         cardHeight = 30
-        buffX = 150
+        buffX = xPos
         buffY = 10
         xPos = buffX
         color = (0, 0, 0)
-        #RGBvalue = #int(c * 250) // (n*4)
         
         
         if cardHeight * n > SCREEN_HEIGHT:
@@ -460,9 +542,9 @@ def DisplayBySuit(deck):
             if cardSuit(c) == "S":
                 color = BLACK
             elif cardSuit(c) == "D":
-                color = RED
+                color = LESS_RED
             elif cardSuit(c) == "C":
-                color = BLACK
+                color = LESS_BLACK
             elif cardSuit(c) == "H":
                 color = RED
                 
@@ -474,15 +556,15 @@ def DisplayBySuit(deck):
     
     return
 
-def DisplayDeck(deck):
+def DisplayByOrder(deck, xPos, width):
     
     n = len(deck)
     
     
     for i, c in enumerate(deck):
-        cardWidth = 100
+        cardWidth = width
         cardHeight = 30
-        buffX = 10
+        buffX = xPos
         buffY = 10
         xPos = buffX
         
@@ -502,26 +584,65 @@ def DisplayDeck(deck):
     
     return
 
-def ShuffleWithSettings(deck, settings):
+
+def Shuffle(deck, settings, deckHistory):
+    
+    startDeck = deckHistory[0]["deck"].copy()
+    
     if settings["shuffle"] == "Cut Deck":
-        return CutDeck(deck, settings["offset"], settings["accuracy"])
+        shuffledDeck = CutDeck(deck, settings["offset"], settings["accuracy"])
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Cut Deck"
+        
     elif settings["shuffle"] == "Riffle Shuffle":
-        return RiffleShuffle(deck, settings["offset"], settings["accuracy"], settings["inOutRand"])
+        shuffledDeck = RiffleShuffle(deck, settings["offset"], settings["accuracy"], settings["inOutRand"])
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Riffle Shuffle"
+        
     elif settings["shuffle"] == "Computer Shuffle":
-        return ComputerRandomShuffle(deck)
+        shuffledDeck = ComputerRandomShuffle(deck)
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Computer Shuffle"
+        
     elif settings["shuffle"] == "Reverse Cards":
-        return ReverseDeck(deck)
+        shuffledDeck = ReverseDeck(deck)
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Reverse Cards"
+        
     elif settings["shuffle"] == "Fisher-Yates Shuffle":
-        return FisherYates(deck)
+        shuffledDeck = FisherYates(deck)
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Fisher-Yates Shuffle"
+        
     elif settings["shuffle"] == "Milk Shuffle":
-        return MilkShuffle(deck, settings["accuracy"])
+        shuffledDeck = MilkShuffle(deck, settings["accuracy"])
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Milk Shuffle"
+        
     elif settings["shuffle"] == "Overhand Shuffle":
-        return OverhandShuffle(deck, settings["accuracy"])
+        shuffledDeck = OverhandShuffle(deck, settings["accuracy"])
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Overhand Shuffle"
+        
     elif settings["shuffle"] == "Over-Under Shuffle":
-        return OverUnderShuffle(deck, settings["accuracy"], settings["inOutRand"])
+        shuffledDeck = OverUnderShuffle(deck, settings["accuracy"], settings["inOutRand"])
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Over-Under Shuffle"
+        
     else:
-        print("Unknown shuffle")
-        return deck
+        shuffledDeck = deck
+        score = Score(shuffledDeck, startDeck)
+        shuffle = "Unknown shuffle"
+    
+    
+    deckHistory.append({
+        "deck": shuffledDeck.copy(),
+        "shuffle": shuffle,
+        "settings": settings.copy(),
+        "score": score
+    })
+    return shuffledDeck, score
+
 
 def MilkShuffle(deck, accuracy):
     
@@ -739,6 +860,7 @@ def CutDeck(deck, offset, accuracy):
     
     return cutDeck
 
+
 def FisherYates(deck):
     n = len(deck)
     shuffledDeck = list(deck)
@@ -755,6 +877,7 @@ def ComputerRandomShuffle(deck):
 def ReverseDeck(deck):
     reversedDeck = deck[::-1]
     return reversedDeck
+
 
 def CutIndex(n, offset, accuracy):
     targetCut = offset * n
@@ -782,17 +905,15 @@ def CutIndex(n, offset, accuracy):
     
     return cutIndex
 
-deck = GenDeck(settings["deckSize"])
-randomnessScore = Score(deck, deck)
-startDeck = deck
+deck, startDeck, deckHistory, score = InitializeDeck(settings["deckSize"])
 deckGenerated = True
 
 running = True
 while running:
 
     clock.tick(60)
-    SCREEN.fill((97, 125, 12))
-    pygame.draw.rect(SCREEN, (50, 50, 50), settingsTab)
+    SCREEN.fill(BACKGROUND_COLOR)
+    pygame.draw.rect(SCREEN, SETTINGSTAB_COLOR, settingsTab)
     
     mouse_held = pygame.mouse.get_pressed()
     mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -804,16 +925,12 @@ while running:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_1:
                 if not deckGenerated:
-                    deck = GenDeck(settings["deckSize"])
-                    startDeck = deck
+                    deck, startDeck, deckHistory, score = InitializeDeck(settings["deckSize"])
                     deckGenerated = True
-                deck = ShuffleWithSettings(deck, settings)
-                randomnessScore = Score(deck, startDeck)
+                deck, score = Shuffle(deck, settings, deckHistory)
 
             elif event.key == pygame.K_r:
-                deck = GenDeck(settings["deckSize"])
-                startDeck = deck
-                randomnessScore = Score(deck, startDeck)
+                deck, startDeck, deckHistory, score = InitializeDeck(settings["deckSize"])
                 deckGenerated = True
 
             elif event.key == pygame.K_q:
@@ -825,22 +942,17 @@ while running:
                     if button.button.collidepoint(event.pos):
                         if button.name == "shuffle":
                             if button.value == False:
-                                deck = ShuffleWithSettings(deck, settings)
-                                randomnessScore = Score(deck, startDeck)
+                                deck, score = Shuffle(deck, settings, deckHistory)
                                 button.value = True
-                                randomnessScore._stepped_trend_score()
                         elif button.name == "assign shuffle":
                             button.nextValue()
                             settings["shuffle"] = button.value
                             print("Selected shuffle: " + str(button.value))
                         elif button.name == "reset":
                             if button.value == False:
-                                deck = GenDeck(settings["deckSize"])
-                                startDeck = deck
-                                randomnessScore = Score(deck, startDeck)
+                                deck, startDeck, deckHistory, score = InitializeDeck(settings["deckSize"])
                                 deckGenerated = True
                                 button.value = True
-                                #print("expectedIdeal: " + str(expectedIdealSimulator(52, 10000)))
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 if buttons["shuffle"].value == True:
@@ -874,15 +986,21 @@ while running:
         else:
             button.draw(SCREEN, GREY, 0, -25, 5, 0)
             
-    Draw_text(str(int(randomnessScore.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 10)
-    Draw_text(str(int(randomnessScore.absoluteDistanceScore * 100)) + "% :Absolut distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 30)
-    Draw_text(str(int(randomnessScore.relativeDistanceScore * 100)) + "% :Relative distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 50)
-    Draw_text(str(int(randomnessScore.orderScore * 100)) + "% :Order score", FONT, BLACK, settingsTabX + 10, settingsTabY + 70)
-    Draw_text(str(int(randomnessScore.consecutiveTrendScore * 100)) + "% :Consecutive trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 90)
-    Draw_text(str(int(randomnessScore.steppedTrendScore * 100)) + "% :Stepped trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 110)
+    Draw_text(str(int(score.absoluteDistanceScore * 100)) + "% :Absolut distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 10)
+    Draw_text(str(int(score.relativeDistanceScore * 100)) + "% :Relative distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 30)
+    Draw_text(str(int(score.orderScore * 100)) + "% :Order score", FONT, BLACK, settingsTabX + 10, settingsTabY + 50)
     
-    DisplayBySuit(deck)
-    DisplayDeck(deck)
+    Draw_text(str(int(score.consecutiveTrendScore * 100)) + "% :Consecutive trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 90)
+    Draw_text(str(int(score.steppedTrendScore * 100)) + "% :Stepped trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 110)
+    
+    Draw_text(str(int(score.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 150)
+    
+    #DisplayByRank(deck, 300)
+    #DisplayBySuit(deck, 150)
+    #DisplayByOrder(deck, 10)
+    
+    DisplayDeckHistory(deckHistory, "Rank")
+    
     pygame.display.flip()
     
     
