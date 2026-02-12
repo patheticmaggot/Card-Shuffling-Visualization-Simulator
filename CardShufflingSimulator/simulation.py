@@ -87,7 +87,20 @@ class Button:
             Draw_text(str(self.value), FONT, BLACK, self.button.x + textValuex, self.button.y + textValueY)
 
 class Score:
-    def __init__(self, shuffledDeck, initialDeck, eps=1e-9, w_abs=0.25, w_rel=0.25, w_order=0.25, w_cons = 0.25, w_step = 0.25):
+    def __init__(self, 
+                 shuffledDeck, 
+                 initialDeck, 
+                 eps=1e-9, 
+                 w_abs=0.25, 
+                 w_rel=0.25, 
+                 w_order=0.25, 
+                 w_cons = 0.25, 
+                 w_step = 0.25, 
+                 w_rank = 0.25,
+                 w_suit = 0.25,
+                 w_color = 0.25
+                 ):
+        
         self.shuffledDeck = shuffledDeck
         self.initialDeck = initialDeck
         self.eps = eps
@@ -98,6 +111,9 @@ class Score:
         self.w_order = w_order
         self.w_cons = w_cons
         self.w_step = w_step
+        self.w_reank = w_rank
+        self.w_suit = w_suit
+        self.w_color = w_color
 
         # compute individual scores
         self.absoluteDistanceScore = self._absolute_distance_score()
@@ -105,6 +121,9 @@ class Score:
         self.orderScore = self._order_score()
         self.consecutiveTrendScore = self._consecutive_trend_score()
         self.steppedTrendScore = self._stepped_trend_score()
+        self.consecutiveRankScore = self._consecutive_rank_score()
+        self.consecutiveSuitScore = self._consecutive_suit_score()
+        self.consecutiveColorScore = self._consecutive_color_score()
 
         # compute total score
         self.totalScore = self._total_score()
@@ -255,7 +274,8 @@ class Score:
 
         return 1 - abs(fraction - expectedIdeal) / expectedIdeal
     
-    def _consecutive_trend_score(self, shape=8.0):
+    
+    def _consecutive_trend_score(self):
         """
         Scores how strongly the deck exhibits long increasing or decreasing trends.
         
@@ -272,8 +292,9 @@ class Score:
             return 0.0
 
         total_score = 0.0
-        streakCutoff = 1
+        streakLengthExponent = 1.1
         streak = 0
+        streakCutOff = 2
         prev_dir = 0
 
         for i in range(n - 1):
@@ -288,19 +309,20 @@ class Score:
 
             if curr_dir != 0 and curr_dir == prev_dir:
                 streak += 1
-            elif curr_dir != 0:
-                streak = 1
             else:
-                streak = 0
+                if streak > streakCutOff:
+                    total_score += streakLengthExponent ** (streak - streakCutOff)
+                streak = 1
 
             prev_dir = curr_dir
-            
-            if streak > streakCutoff:
-                total_score += streak
-
-
-        maxTrend = sum(i for i in range(streakCutoff + 1, n))
+         
+        # handle final streak
+        if streak > streakCutOff:
+            total_score += streakLengthExponent ** (streak - streakCutOff)
         
+
+        maxTrend = streakLengthExponent ** (n - 1 - streakCutOff)
+        shape = 4.0
         trendScore = (1 - total_score / maxTrend) ** shape
         
         return trendScore
@@ -356,6 +378,94 @@ class Score:
         
         return score
     
+    def _consecutive_rank_score(self):
+        
+        lastRank = None
+        totalRepeats = 0
+        
+        for c in self.shuffledDeck:
+            currentRank = CardRank(c)
+            if currentRank == lastRank:
+                totalRepeats += 1
+            lastRank = currentRank
+        
+        n = len(self.shuffledDeck)
+        r = len(RANKS)
+        
+        base = n // r
+        remainder = n % r
+
+        # Compute theoretical maximum repeats
+        maxRepeats = (remainder * base + (r - remainder) * (base - 1))
+    
+        raw = 1 - (totalRepeats / maxRepeats)
+        #target = 0.923  # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.9231405128213228"
+        
+        #score = 1 - abs(raw - target) / target
+        
+        return raw #score
+    
+    def _consecutive_suit_score(self):
+    
+        lastSuit = None
+        totalRepeats = 0
+        
+        for c in self.shuffledDeck:
+            currentSuit = CardSuit(c)
+            if currentSuit == lastSuit:
+                totalRepeats += 1
+            lastSuit = currentSuit
+        
+        n = len(self.shuffledDeck)
+        s = len(SUITS)
+        
+        base = n // s
+        remainder = n % s
+
+        # Compute theoretical maximum repeats
+        maxRepeats = (remainder * base + (s - remainder) * (base - 1))
+
+        raw = 1 - (totalRepeats / maxRepeats)
+        target = 0.75   # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.7502385416666635"
+        
+        score = 1 - abs(raw - target) / target
+        
+        return score
+    
+    def _consecutive_color_score(self):
+    
+        lastColor = None
+        currentColor = None
+        totalRepeats = 0
+        
+        for c in self.shuffledDeck:
+            
+            currentSuit = CardSuit(c)
+            if currentSuit == "S" or currentSuit == "C":
+                currentColor = "B"
+            elif currentSuit == "D" or currentSuit == "H":
+                currentColor = "R"
+            
+            if currentColor == lastColor:
+                totalRepeats += 1
+            lastColor = currentColor
+        
+        n = len(self.shuffledDeck)
+        s = 2   # Colors
+        
+        base = n // s
+        remainder = n % s
+
+        # Compute theoretical maximum repeats
+        maxRepeats = (remainder * base + (s - remainder) * (base - 1))
+
+        raw = 1 - (totalRepeats / maxRepeats)
+        target = 0.5   # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.5000056000000025"
+        
+        score = 1 - abs(raw - target) / target
+        
+        return score
+    
 settings = {
     "shuffle": "Riffle Shuffle",
     "offset": 0.0,
@@ -376,66 +486,29 @@ buttons = {
 }
 
 
-def expectedIdealSimulator(n, trials=1000):
+def ExpectedIdealSimulator(n, trials=1000):
     initialDeck = list(range(n))
     total1 = 0
-    power = 1.5
     
     values = []
     
     for _ in range(trials):
         shuffledDeck = FisherYates(initialDeck)
 
-        
-        
-        if n < 2:
-            return 0.0
-
-        trendScore = 0.0
-
-        streak = 0
-        prev_dir = 0
-
-        for i in range(n - 1):
-            diff = shuffledDeck[i + 1] - shuffledDeck[i]
-
-            if diff > 0:
-                curr_dir = 1
-            elif diff < 0:
-                curr_dir = -1
-            else:
-                curr_dir = 0
-
-            if curr_dir != 0 and curr_dir == prev_dir:
-                streak += 1
-            elif curr_dir != 0:
-                streak = 1
-            else:
-                streak = 0
-
-            prev_dir = curr_dir
-            if streak > 1:
-                trendScore += streak ** power
-            
-        #expectedIdeal = 90
-        #trendScore1 = 1 - abs(trendScore - expectedIdeal) / expectedIdeal
-        values.append(trendScore)
-        
-        total1 += trendScore
-        
-        
-        print(trendScore)
+        score = Score(shuffledDeck, initialDeck)
+        total1 += score.consecutiveColorScore
+        values.append(score.consecutiveColorScore)
         
     plt.hist(values, bins=50)
     plt.show()
     expectedMean = total1 / trials
     return expectedMean
 
-def cardSuit(n):
+def CardSuit(n):
     n = n % 52
     return SUITS[n // 13]
 
-def cardRank(n):
+def CardRank(n):
     n = n % 52
     return RANKS[n % 13]
 
@@ -506,7 +579,7 @@ def DisplayByRank(deck, xPos, width):
         
         else:
             
-            index = RANKS.index(cardRank(c))
+            index = RANKS.index(CardRank(c))
             shade = (12 - index) * 20
             color = (shade, shade, shade)
                 
@@ -539,13 +612,13 @@ def DisplayBySuit(deck, xPos, width):
             yPos = (SCREEN_HEIGHT - cardHeight) // 2
         
         else:
-            if cardSuit(c) == "S":
+            if CardSuit(c) == "S":
                 color = BLACK
-            elif cardSuit(c) == "D":
+            elif CardSuit(c) == "D":
                 color = LESS_RED
-            elif cardSuit(c) == "C":
+            elif CardSuit(c) == "C":
                 color = LESS_BLACK
-            elif cardSuit(c) == "H":
+            elif CardSuit(c) == "H":
                 color = RED
                 
             yPos = SCREEN_HEIGHT - (cardHeight * i) - buffY - cardHeight
@@ -953,6 +1026,7 @@ while running:
                                 deck, startDeck, deckHistory, score = InitializeDeck(settings["deckSize"])
                                 deckGenerated = True
                                 button.value = True
+                                #print(ExpectedIdealSimulator(52, 100000))
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 if buttons["shuffle"].value == True:
@@ -992,14 +1066,17 @@ while running:
     
     Draw_text(str(int(score.consecutiveTrendScore * 100)) + "% :Consecutive trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 90)
     Draw_text(str(int(score.steppedTrendScore * 100)) + "% :Stepped trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 110)
+    Draw_text(str(int(score.consecutiveRankScore * 100)) + "% :Consecutive rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 130)
+    Draw_text(str(int(score.consecutiveSuitScore * 100)) + "% :Consecutive suit score", FONT, BLACK, settingsTabX + 10, settingsTabY + 150)
+    Draw_text(str(int(score.consecutiveColorScore * 100)) + "% :Consecutive color score", FONT, BLACK, settingsTabX + 10, settingsTabY + 170)
     
-    Draw_text(str(int(score.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 150)
+    Draw_text(str(int(score.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 210)
     
     #DisplayByRank(deck, 300)
     #DisplayBySuit(deck, 150)
     #DisplayByOrder(deck, 10)
     
-    DisplayDeckHistory(deckHistory, "Rank")
+    DisplayDeckHistory(deckHistory, "Order")
     
     pygame.display.flip()
     
