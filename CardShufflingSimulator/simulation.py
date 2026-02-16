@@ -43,6 +43,8 @@ SHUFFLES = ["Riffle Shuffle",
             "Computer Shuffle", 
             "Fisher-Yates Shuffle"]
 
+VIEWS = ["Suit", "Rank", "Order"]
+
 SUITS = ["S", "D", "C", "H"]
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 
@@ -95,10 +97,12 @@ class Score:
                  w_rel=0.25, 
                  w_order=0.25, 
                  w_cons = 0.25, 
-                 w_step = 0.25, 
+                 w_lipa = 0.25, 
                  w_rank = 0.25,
                  w_suit = 0.25,
-                 w_color = 0.25
+                 w_color = 0.25,
+                 w_TRank = 0.25,
+                 w_step2 = 0.25
                  ):
         
         self.shuffledDeck = shuffledDeck
@@ -110,23 +114,28 @@ class Score:
         self.w_rel = w_rel
         self.w_order = w_order
         self.w_cons = w_cons
-        self.w_step = w_step
+        self.w_lipa = w_lipa
         self.w_reank = w_rank
         self.w_suit = w_suit
         self.w_color = w_color
+        self.w_TRank = w_TRank
+        #self.w_step2 = w_step2
 
         # compute individual scores
         self.absoluteDistanceScore = self._absolute_distance_score()
         self.relativeDistanceScore = self._relative_distance_score()
         self.orderScore = self._order_score()
         self.consecutiveTrendScore = self._consecutive_trend_score()
-        self.steppedTrendScore = self._stepped_trend_score()
-        self.consecutiveRankScore = self._consecutive_rank_score()
-        self.consecutiveSuitScore = self._consecutive_suit_score()
-        self.consecutiveColorScore = self._consecutive_color_score()
+        self.linearPatternScore = self._linear_pattern_score()
+        self.repeatingRankScore = self._repeating_rank_score()
+        self.repeatingSuitScore = self._repeating_suit_score()
+        self.repeatingColorScore = self._repeating_color_score()
+        self.trendingRankScore = self._trending_rank_score()
+        self.steppedTrendScore2 = self._stepped_trend_score2()
 
         # compute total score
         self.totalScore = self._total_score()
+        self.humanScore = self._human_score()
 
     # ---------- total score ----------
     def _total_score(self, p=-6):
@@ -147,7 +156,7 @@ class Score:
         self.relativeDistanceScore,
         self.orderScore,
         self.consecutiveTrendScore,
-        self.steppedTrendScore
+        self.linearPatternScore
         ]
 
 
@@ -156,7 +165,7 @@ class Score:
         self.w_rel,
         self.w_order,
         self.w_cons,
-        self.w_step
+        self.w_lipa
         ]
 
 
@@ -171,6 +180,31 @@ class Score:
             den += w
 
 
+        return (num / den) ** (1 / p)
+    
+    def _human_score(self, p=-6):
+        
+        scores = [
+            self.repeatingRankScore,
+            self.repeatingSuitScore,
+            self.repeatingColorScore
+        ]
+        
+        weights = [
+            self.w_reank,
+            self.w_suit,
+            self.w_color,
+        ]
+        
+        eps = self.eps
+        num = 0.0
+        den = 0.0
+        
+        for s, w in zip(scores, weights):
+            s = max(s, eps)
+            num += w * (s ** p)
+            den += w
+        
         return (num / den) ** (1 / p)
 
     # ---------- component scores ----------
@@ -292,7 +326,7 @@ class Score:
             return 0.0
 
         total_score = 0.0
-        streakLengthExponent = 1.1
+        streakLengthExponent = 2.0
         streak = 0
         streakCutOff = 2
         prev_dir = 0
@@ -311,36 +345,110 @@ class Score:
                 streak += 1
             else:
                 if streak > streakCutOff:
-                    total_score += streakLengthExponent ** (streak - streakCutOff)
+                    total_score += (streak - streakCutOff) ** streakLengthExponent
                 streak = 1
 
             prev_dir = curr_dir
          
         # handle final streak
         if streak > streakCutOff:
-            total_score += streakLengthExponent ** (streak - streakCutOff)
+            total_score += (streak - streakCutOff) ** streakLengthExponent
         
 
-        maxTrend = streakLengthExponent ** (n - 1 - streakCutOff)
-        shape = 4.0
+        maxTrend = (n - 1 - streakCutOff) ** streakLengthExponent
+        shape = 15.0
         trendScore = (1 - total_score / maxTrend) ** shape
         
         return trendScore
     
-    def _stepped_trend_score(self):
+    def _linear_pattern_score(self):
         
         """
-        Scores how much the deck avoids rising or decending patterns every other, every 3rd, every 4th etc. card.
+        Scores how much the deck exhibits linear patterns e.g every 3rd card the card number rises by 4 for the whole deck then score = 0.
         
         - Scores the shuffled deck on its own doesnt care what the initial deck was
-        - Looks at only a step size of 1 (ascending/descending) 
-        - Longer continuous patterns contribute more weight with minimum length being 2 step trend
-        - The smaller the jump over cards is the more its weght on the final score. every other weighing the most
+        - Looks trough every step height between 1 and n/2 (ascending/descending) for every step length that consist of at least 4 steps
+        - Longer continuous patterns contribute more weight with minimum length being 3 step trend and maximum the whole deck
         - Returns score in [0, 1]
-        - 0 = Atleast one pattern between every other to every n:th spans the whole deck lenght 
-            (example: every 4th card is going [1, 2, 3, 4, 5...] through the whole deck)
-        - 1 = none of the patterns we try to search for have a rising nor decending pattern for more than 2 cards
+        - 0 = Atleast one pattern of the checked step sizes (example: every 4th card is going [1, 3, 5, 7, 9...] through the whole deck)
+        - 1 = none of the patterns tried have a rising or decending pattern for more than 3 cards
         """
+        
+        n = len(self.initialDeck)
+        if n < 2: 
+            return 0.0
+        
+        scores = []
+        minStepLength = 1
+        
+        for stepLength in range(minStepLength, n - 1):
+            
+            positions = range(0, n, stepLength)
+            steppedValues = [self.shuffledDeck[i] for i in positions]
+            numberOfSteps = len(steppedValues)
+            streakLengthExponent = 2.0
+            streakCutOff = 2
+            maxStepHeight = int(n / 2)
+            
+            scoresH = []
+            
+            if numberOfSteps < 4:
+                continue
+            
+            for stepHeight in range(1, maxStepHeight):
+                
+                total_score = 0.0
+                streak = 0
+                prev_dir = 0
+                
+                for i in range(numberOfSteps - 1):
+                    
+                    diff = steppedValues[i + 1] - steppedValues[i]
+
+                    if diff == stepHeight:
+                        curr_dir = 1
+                    elif diff == -stepHeight:
+                        curr_dir = -1
+                    else:
+                        curr_dir = 0
+
+                    if curr_dir != 0 and curr_dir == prev_dir:
+                        streak += 1
+                    else:
+                        if streak > streakCutOff:
+                            total_score += (streak - streakCutOff) ** streakLengthExponent
+                        streak = 0
+
+                    prev_dir = curr_dir
+                
+                # handle final streak
+                if streak > streakCutOff:
+                    total_score += (streak - streakCutOff) ** streakLengthExponent
+                
+
+                maxTrend = (numberOfSteps - 1 - streakCutOff) ** streakLengthExponent
+                shape = 15.0
+                trendScore = (1 - total_score / maxTrend) ** shape
+                scoresH.append(trendScore)
+                #print("L: " + str(stepLength) + " H: " + str(stepHeight) + " = Score: " + str(trendScore))
+            scores.append(min(scoresH))
+            #print("L: "+ str(stepLength) + " : " + str(min(scoresH)))
+        score = min(scores)
+        print(score)
+        return score
+    """
+    def _stepped_trend_score2(self):
+        
+        
+        Scores how much the deck exhibits linear patterns e.g every 3rd card the card number rises by 4 for the whole deck then score = 0.
+        
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
+        - Looks trough every step height between 1 and n/2 (ascending/descending) for every step length that consist of at least 4 steps
+        - Longer continuous patterns contribute more weight with minimum length being 3 step trend and maximum the whole deck
+        - Returns score in [0, 1]
+        - 0 = Atleast one pattern of the checked step sizes (example: every 4th card is going [1, 3, 5, 7, 9...] through the whole deck)
+        - 1 = none of the patterns tried have a rising or decending pattern for more than 3 cards
+        
         
         n = len(self.shuffledDeck)
         product = 1.0
@@ -377,8 +485,9 @@ class Score:
         score = product
         
         return score
+    """
     
-    def _consecutive_rank_score(self):
+    def _repeating_rank_score(self):
         
         lastRank = None
         totalRepeats = 0
@@ -398,14 +507,14 @@ class Score:
         # Compute theoretical maximum repeats
         maxRepeats = (remainder * base + (r - remainder) * (base - 1))
     
-        raw = 1 - (totalRepeats / maxRepeats)
-        #target = 0.923  # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.9231405128213228"
+        rawScore = 1 - (totalRepeats / maxRepeats)
+        #targetScore = 0.923  # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.9231405128213228"
         
-        #score = 1 - abs(raw - target) / target
+        #score = 1 - abs(rawScore - targetScore) / targetScore
         
-        return raw #score
+        return rawScore #score
     
-    def _consecutive_suit_score(self):
+    def _repeating_suit_score(self):
     
         lastSuit = None
         totalRepeats = 0
@@ -425,14 +534,14 @@ class Score:
         # Compute theoretical maximum repeats
         maxRepeats = (remainder * base + (s - remainder) * (base - 1))
 
-        raw = 1 - (totalRepeats / maxRepeats)
-        target = 0.75   # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.7502385416666635"
+        rawScore = 1 - (totalRepeats / maxRepeats)
+        targetScore = 0.75   # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.7502385416666635"
         
-        score = 1 - abs(raw - target) / target
+        score = 1 - abs(rawScore - targetScore) / targetScore
         
         return score
     
-    def _consecutive_color_score(self):
+    def _repeating_color_score(self):
     
         lastColor = None
         currentColor = None
@@ -459,30 +568,88 @@ class Score:
         # Compute theoretical maximum repeats
         maxRepeats = (remainder * base + (s - remainder) * (base - 1))
 
-        raw = 1 - (totalRepeats / maxRepeats)
-        target = 0.5   # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.5000056000000025"
+        rawScore = 1 - (totalRepeats / maxRepeats)
+        targetScore = 0.5   # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.5000056000000025"
         
-        score = 1 - abs(raw - target) / target
+        score = 1 - abs(rawScore - targetScore) / targetScore
         
         return score
+    
+    def _trending_rank_score(self):
+        
+        n = len(self.initialDeck)
+        if n < 2:
+            return 0.0
+
+        total_score = 0.0
+        streakLengthExponent = 2.0
+        streak = 0
+        streakCutOff = 2
+        prev_dir = 0
+
+        for i in range(n - 1):
+            
+            
+            diff = RANKS.index(CardRank(self.shuffledDeck[i + 1])) - RANKS.index(CardRank(self.shuffledDeck[i]))
+
+            """
+            # Make sure it works right when crossing the A to K or K to A barrier. 
+            if diff == 12:
+                curr_dir = -1
+            elif diff == -12:
+                curr_dir = 1
+            """
+            
+            if diff > 0:
+                curr_dir = 1
+            elif diff < 0:
+                curr_dir = -1
+            else:
+                curr_dir = prev_dir
+
+            if curr_dir == prev_dir:
+                streak += 1
+            else:
+                if streak > streakCutOff:
+                    total_score += (streak - streakCutOff) ** streakLengthExponent
+                streak = 1
+
+            prev_dir = curr_dir
+         
+        # handle final streak
+        if streak > streakCutOff:
+            total_score += (streak - streakCutOff) ** streakLengthExponent
+        
+
+        maxTrend = (n - 1 - streakCutOff) ** streakLengthExponent
+        shape = 15.0
+        rawScore = (1 - total_score / maxTrend) ** shape
+        
+        #targetScore = 0.79  # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.7900041300991113"
+        
+        #score = 1 - abs(rawScore - targetScore) / targetScore
+        
+        return rawScore #score
     
 settings = {
     "shuffle": "Riffle Shuffle",
     "offset": 0.0,
     "accuracy": 0.0,
     "deckSize": 52,
-    "inOutRand": "o"
+    "inOutRand": "o",
+    "displayType": "Suit"
 }
 
 sliders = {
-    "accuracy": Slider((settingsTabX + 10), settingsTabHeight - 220, 200, 25, "accuracy"),
-    "offset": Slider((settingsTabX + 10), settingsTabHeight - 180, 200, 25, "offset"),
+    "accuracy": Slider((settingsTabX + 10), settingsTabHeight - 260, 200, 25, "accuracy"),
+    "offset": Slider((settingsTabX + 10), settingsTabHeight - 220, 200, 25, "offset"),
 }
 
 buttons = {
-    "shuffle": Button((settingsTabX + 20), (settingsTabHeight - 75), 75, 50, "shuffle", [False, True], True, False),
-    "assign shuffle": Button((settingsTabX + 10), (settingsTabHeight - 120), 200, 25, "assign shuffle", SHUFFLES, True, True),
-    "reset": Button((settingsTabX + 150), (settingsTabHeight - 75), 75, 50, "reset", [False, True], True, False)
+    "change view": Button((settingsTabX + 10), (settingsTabHeight - 145), 200, 25, "change view", VIEWS, True, True),
+    "assign shuffle": Button((settingsTabX + 10), (settingsTabHeight - 95), 200, 25, "assign shuffle", SHUFFLES, True, True),
+    "shuffle": Button((settingsTabX + 10), (settingsTabHeight - 60), 110, 50, "shuffle", [False, True], True, False),
+    "reset": Button((settingsTabX + 130), (settingsTabHeight - 60), 110, 50, "reset", [False, True], True, False)
 }
 
 
@@ -496,13 +663,14 @@ def ExpectedIdealSimulator(n, trials=1000):
         shuffledDeck = FisherYates(initialDeck)
 
         score = Score(shuffledDeck, initialDeck)
-        total1 += score.consecutiveColorScore
-        values.append(score.consecutiveColorScore)
-        
+        total1 += score.consecutiveTrendScore
+        values.append(score.consecutiveTrendScore)
+    
+    expectedMean = total1 / trials
+    print(expectedMean)
     plt.hist(values, bins=50)
     plt.show()
-    expectedMean = total1 / trials
-    return expectedMean
+    return
 
 def CardSuit(n):
     n = n % 52
@@ -1013,20 +1181,27 @@ while running:
             if event.button == 1:
                 for button in buttons.values():
                     if button.button.collidepoint(event.pos):
+                        
                         if button.name == "shuffle":
                             if button.value == False:
                                 deck, score = Shuffle(deck, settings, deckHistory)
                                 button.value = True
-                        elif button.name == "assign shuffle":
-                            button.nextValue()
-                            settings["shuffle"] = button.value
-                            print("Selected shuffle: " + str(button.value))
+                                #score._stepped_trend_score2()
                         elif button.name == "reset":
                             if button.value == False:
                                 deck, startDeck, deckHistory, score = InitializeDeck(settings["deckSize"])
                                 deckGenerated = True
                                 button.value = True
-                                #print(ExpectedIdealSimulator(52, 100000))
+                                #ExpectedIdealSimulator(52, 100000)
+                        elif button.name == "assign shuffle":
+                            button.nextValue()
+                            settings["shuffle"] = button.value
+                            print("Selected shuffle: " + str(button.value))
+                        elif button.name == "change view":
+                            button.nextValue()
+                            settings["displayType"] = button.value
+                            print("Selected view: " + str(button.value))
+                            
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 if buttons["shuffle"].value == True:
@@ -1065,18 +1240,21 @@ while running:
     Draw_text(str(int(score.orderScore * 100)) + "% :Order score", FONT, BLACK, settingsTabX + 10, settingsTabY + 50)
     
     Draw_text(str(int(score.consecutiveTrendScore * 100)) + "% :Consecutive trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 90)
-    Draw_text(str(int(score.steppedTrendScore * 100)) + "% :Stepped trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 110)
-    Draw_text(str(int(score.consecutiveRankScore * 100)) + "% :Consecutive rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 130)
-    Draw_text(str(int(score.consecutiveSuitScore * 100)) + "% :Consecutive suit score", FONT, BLACK, settingsTabX + 10, settingsTabY + 150)
-    Draw_text(str(int(score.consecutiveColorScore * 100)) + "% :Consecutive color score", FONT, BLACK, settingsTabX + 10, settingsTabY + 170)
+    Draw_text(str(int(score.linearPatternScore * 100)) + "% :Stepped trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 110)
     
-    Draw_text(str(int(score.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 210)
+    Draw_text(str(int(score.repeatingRankScore * 100)) + "% :Consecutive rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 150)
+    Draw_text(str(int(score.repeatingSuitScore * 100)) + "% :Consecutive suit score", FONT, BLACK, settingsTabX + 10, settingsTabY + 170)
+    Draw_text(str(int(score.repeatingColorScore * 100)) + "% :Consecutive color score", FONT, BLACK, settingsTabX + 10, settingsTabY + 190)
+    Draw_text(str(int(score.trendingRankScore * 100)) + "% :Trending rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 210)
+    
+    Draw_text(str(int(score.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 250)
+    Draw_text(str(int(score.humanScore * 100)) + "% :Human score", FONT, BLACK, settingsTabX + 10, settingsTabY + 270)
     
     #DisplayByRank(deck, 300)
     #DisplayBySuit(deck, 150)
     #DisplayByOrder(deck, 10)
     
-    DisplayDeckHistory(deckHistory, "Order")
+    DisplayDeckHistory(deckHistory, settings["displayType"])
     
     pygame.display.flip()
     
