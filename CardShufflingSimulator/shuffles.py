@@ -1,0 +1,322 @@
+import random
+import scoring
+
+def CutIndex(n, offset, accuracy):
+    targetCut = offset * n
+
+    idealRadius = (1 - accuracy) * (n / 2)
+
+    # Initial bounds
+    low = targetCut - idealRadius
+    high = targetCut + idealRadius
+
+    # Redistribute range to the higher side if hitting the lower bound
+    if low < 0:
+        high += -low
+        low = 0
+
+    # Redistribute range to the lower side if hitting the higher bound
+    if high > n:
+        low -= (high - n)
+        high = n
+
+    low = max(0, low)
+    high = min(n, high)
+
+    cutIndex = int(random.uniform(low, high))
+    
+    return cutIndex
+
+
+def Shuffle(deck, settings, deckHistory):
+    
+    startDeck = deckHistory[0]["deck"].copy()
+    
+    if settings["shuffle"] == "Cut Deck":
+        shuffledDeck = CutDeck(deck, settings["offset"], settings["accuracy"])
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Cut Deck"
+        
+    elif settings["shuffle"] == "Riffle Shuffle":
+        shuffledDeck = RiffleShuffle(deck, settings["offset"], settings["accuracy"], settings["inOutRand"])
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Riffle Shuffle"
+        
+    elif settings["shuffle"] == "Computer Shuffle":
+        shuffledDeck = ComputerRandomShuffle(deck)
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Computer Shuffle"
+        
+    elif settings["shuffle"] == "Reverse Cards":
+        shuffledDeck = ReverseDeck(deck)
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Reverse Cards"
+        
+    elif settings["shuffle"] == "Fisher-Yates Shuffle":
+        shuffledDeck = FisherYates(deck)
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Fisher-Yates Shuffle"
+        
+    elif settings["shuffle"] == "Milk Shuffle":
+        shuffledDeck = MilkShuffle(deck, settings["accuracy"])
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Milk Shuffle"
+        
+    elif settings["shuffle"] == "Overhand Shuffle":
+        shuffledDeck = OverhandShuffle(deck, settings["accuracy"])
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Overhand Shuffle"
+        
+    elif settings["shuffle"] == "Over-Under Shuffle":
+        shuffledDeck = OverUnderShuffle(deck, settings["accuracy"], settings["inOutRand"])
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Over-Under Shuffle"
+        
+    else:
+        shuffledDeck = deck
+        score = scoring.Score(shuffledDeck, startDeck)
+        shuffle = "Unknown shuffle"
+    
+    
+    deckHistory.append({
+        "deck": shuffledDeck.copy(),
+        "shuffle": shuffle,
+        "settings": settings.copy(),
+        "score": score
+    })
+    return shuffledDeck, score
+
+
+def MilkShuffle(deck, accuracy):
+    
+    accuracy = max(0.0, min(1.0, accuracy))
+    initialDeck = deck[:]
+    shuffledDeck = []
+    
+    decay_rate = 0.6
+    base = 1 - decay_rate * accuracy
+    k = 4
+    s = 0.1
+    startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
+    
+    while initialDeck:
+        
+        clump = []
+        endingChance = 0
+        cardsTaken = 0
+        
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop(0))
+            cardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
+                
+        shuffledDeck.extend(clump)
+        
+        
+        if not initialDeck:
+            break
+        
+        
+        
+        clump = []
+        endingChance = 0
+        cardsTaken = 0
+        
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop())
+            cardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
+                
+        shuffledDeck.extend(reversed(clump))
+        
+    return shuffledDeck
+
+def OverhandShuffle(deck, accuracy):
+    
+    accuracy = max(0.0, min(1.0, accuracy))
+    initialDeck = deck[:]
+    shuffledDeck = []
+    
+    decay_rate = 0.6
+    base = 1 - decay_rate * accuracy
+    k = 4
+    s = 0.1
+    startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
+    
+    while initialDeck:
+        
+        clump = []
+        endingChance = 0
+        cardsTaken = 0
+        
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop())
+            cardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
+        
+        shuffledDeck.extend(reversed(clump))
+    
+    return shuffledDeck
+
+def OverUnderShuffle(deck, accuracy, inOutRand):
+    
+    accuracy = max(0.0, min(1.0, accuracy))
+    initialDeck = deck[:]
+    shuffledDeck = []
+    
+    if (inOutRand == "i"):
+        useTop = True
+    elif (inOutRand == "o"):
+        useTop = False
+    else:
+        useTop = random.choice([True, False])
+        
+    decay_rate = 0.6
+    base = 1 - decay_rate * accuracy
+    k = 4
+    s = 0.1
+    startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
+    
+    while initialDeck:
+        
+        clump = []
+        endingChance = 0
+        cardsTaken = 0
+        
+        
+        while random.random() > endingChance:
+            endingChance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsTaken))
+            
+            clump.append(initialDeck.pop())
+            cardsTaken += 1
+            
+            if not initialDeck:
+                endingChance = 1
+        
+        if useTop:
+            shuffledDeck.extend(reversed(clump))
+        else:
+            shuffledDeck[0:0] = reversed(clump)
+        
+        useTop = not useTop
+            
+        
+    
+    return shuffledDeck
+
+def RiffleShuffle(deck, offset, accuracy, inOutRand):
+    """
+    Offset: 0.5 = deck split in 2 equal halves, Accuracy: 0.0 = deck cut point completly random 
+    and one half will go as a whole first then the other as  whole, 1.0 = deck cut point is exact 
+    and the halves will deposit exactly one card one after the other
+    """
+    
+    n = len(deck)
+    
+    offset = max(0.0, min(1.0, offset))
+    accuracy = max(0.0, min(1.0, accuracy))
+    
+    # Make the accuracy of the cut index to change between 90-100 accuracy since since the cut is ment to be done exactly at the middle
+    cutIndex = CutIndex(n, offset, (0.90 + 0.10 * accuracy))
+    
+    top = deck[cutIndex:]
+    bottom = deck[:cutIndex]
+    
+    ti = 0  # Top half Index
+    bi = 0  # Bottom half Index
+    
+    if (inOutRand == "i"):
+        useTop = True
+    elif (inOutRand == "o"):
+        useTop = False
+    else:
+        useTop = random.choice([True, False])
+    
+    shuffledDeck = []
+    cardsSinceSwitch = 0
+    
+    while ti < len(top) or bi < len(bottom):
+
+        # Change the deck half if the other is empty
+        if useTop and ti >= len(top):
+            useTop = False
+            cardsSinceSwitch = 0
+        elif not useTop and bi >= len(bottom):
+            useTop = True
+            cardsSinceSwitch = 0
+
+        # Shuffle a card 
+        if useTop and ti < len(top):
+            shuffledDeck.append(top[ti])
+            ti += 1
+        elif not useTop and bi < len(bottom):
+            shuffledDeck.append(bottom[bi])
+            bi += 1
+        
+        decay_rate = 0.6
+        base = 1 - decay_rate * accuracy
+        k = 4   # Changes the shape of the curve that decides how low the switch_chance starts with 0 cards since switch
+        s = 0.1 # Multiplies the "0 cards since switch" swich_chancees starting chance.
+        startAccuracy = accuracy * s + (accuracy ** k) * (1 - s)
+        switch_chance = accuracy * (1 - (1 - startAccuracy) * (base ** cardsSinceSwitch))
+        
+        # Decide whether to change deck half
+        if random.random() < switch_chance:
+            useTop = not useTop
+            cardsSinceSwitch = 0
+        else:
+            cardsSinceSwitch += 1
+                
+    #print("Offset: " + str(offset))        
+    return shuffledDeck
+
+def CutDeck(deck, offset, accuracy):
+    """
+    Offset: 0.5 = deck split in 2 equal halves, Accuracy will decrease radially from the offset 
+    point from 1 untill completly random at 0
+    """
+    
+    n = len(deck)
+    
+    offset = max(0.0, min(1.0, offset))
+    accuracy = max(0.0, min(1.0, accuracy))
+    
+    cutIndex = CutIndex(n, offset, accuracy)
+    
+    print("Cut index: " + str(cutIndex))
+    top = deck[:cutIndex]
+    bottom = deck[cutIndex:]
+    
+    cutDeck = bottom + top
+    
+    return cutDeck
+
+
+def FisherYates(deck):
+    n = len(deck)
+    shuffledDeck = list(deck)
+    for i in range(n - 1, 0, -1):
+        j = random.randint(0, i)  # 0 ≤ j ≤ i
+        shuffledDeck[i], shuffledDeck[j] = shuffledDeck[j], shuffledDeck[i]
+    
+    return shuffledDeck
+
+def ComputerRandomShuffle(deck):
+    shuffledDeck = random.sample(deck, len(deck))
+    return shuffledDeck
+
+def ReverseDeck(deck):
+    reversedDeck = deck[::-1]
+    return reversedDeck
