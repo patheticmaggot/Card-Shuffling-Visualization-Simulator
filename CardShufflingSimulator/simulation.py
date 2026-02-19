@@ -102,7 +102,8 @@ class Score:
                  w_suit = 0.25,
                  w_color = 0.25,
                  w_TRank = 0.25,
-                 w_step2 = 0.25
+                 #w_copa = 0.25,
+                 w_supa = 0.25
                  ):
         
         self.shuffledDeck = shuffledDeck
@@ -119,7 +120,8 @@ class Score:
         self.w_suit = w_suit
         self.w_color = w_color
         self.w_TRank = w_TRank
-        #self.w_step2 = w_step2
+        #self.w_copa = w_copa
+        self.w_supa = w_supa
 
         # compute individual scores
         self.absoluteDistanceScore = self._absolute_distance_score()
@@ -131,7 +133,8 @@ class Score:
         self.repeatingSuitScore = self._repeating_suit_score()
         self.repeatingColorScore = self._repeating_color_score()
         self.trendingRankScore = self._trending_rank_score()
-        self.steppedTrendScore2 = self._stepped_trend_score2()
+        #self.colorPatternScore = self._color_pattern_score()
+        self.suitPatternScore = self._suit_pattern_score()
 
         # compute total score
         self.totalScore = self._total_score()
@@ -187,13 +190,19 @@ class Score:
         scores = [
             self.repeatingRankScore,
             self.repeatingSuitScore,
-            self.repeatingColorScore
+            self.repeatingColorScore,
+            self.trendingRankScore,
+            #self.colorPatternScore,
+            self.suitPatternScore
         ]
         
         weights = [
             self.w_reank,
             self.w_suit,
             self.w_color,
+            self.w_TRank,
+            #self.w_copa,
+            self.w_supa
         ]
         
         eps = self.eps
@@ -434,7 +443,7 @@ class Score:
             scores.append(min(scoresH))
             #print("L: "+ str(stepLength) + " : " + str(min(scoresH)))
         score = min(scores)
-        print(score)
+        #print(score)
         return score
     """
     def _stepped_trend_score2(self):
@@ -549,11 +558,7 @@ class Score:
         
         for c in self.shuffledDeck:
             
-            currentSuit = CardSuit(c)
-            if currentSuit == "S" or currentSuit == "C":
-                currentColor = "B"
-            elif currentSuit == "D" or currentSuit == "H":
-                currentColor = "R"
+            currentColor = CardColor(c)
             
             if currentColor == lastColor:
                 totalRepeats += 1
@@ -581,25 +586,20 @@ class Score:
         if n < 2:
             return 0.0
 
-        total_score = 0.0
         streakLengthExponent = 2.0
-        streak = 0
         streakCutOff = 2
+        
+        total_score = 0.0
+        streak = 0
         prev_dir = 0
 
         for i in range(n - 1):
             
+            currentCardRank = RANKS.index(CardRank(self.shuffledDeck[i]))
+            nextCardRank = RANKS.index(CardRank(self.shuffledDeck[i + 1]))
             
-            diff = RANKS.index(CardRank(self.shuffledDeck[i + 1])) - RANKS.index(CardRank(self.shuffledDeck[i]))
+            diff = nextCardRank - currentCardRank
 
-            """
-            # Make sure it works right when crossing the A to K or K to A barrier. 
-            if diff == 12:
-                curr_dir = -1
-            elif diff == -12:
-                curr_dir = 1
-            """
-            
             if diff > 0:
                 curr_dir = 1
             elif diff < 0:
@@ -621,15 +621,134 @@ class Score:
             total_score += (streak - streakCutOff) ** streakLengthExponent
         
 
-        maxTrend = (n - 1 - streakCutOff) ** streakLengthExponent
         shape = 15.0
+        maxTrend = (n - 1 - streakCutOff) ** streakLengthExponent
+        
         rawScore = (1 - total_score / maxTrend) ** shape
         
-        #targetScore = 0.79  # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.7900041300991113"
+        targetScore = 0.79  # Checked with 100 000 shuffles of Fisher-Yates and got the average score of "0.7900041300991113"
         
-        #score = 1 - abs(rawScore - targetScore) / targetScore
+        score = 1 - abs(rawScore - targetScore) / targetScore
         
-        return rawScore #score
+        return score
+    """
+    def _color_pattern_score(self):
+        
+        n = len(self.initialDeck)
+        if n < 2: 
+            return 0.0
+        
+        scores = []
+        minStepLength = 2
+        maxStepLength = 10
+        
+        for stepLength in range(minStepLength, maxStepLength):
+            
+            positions = range(0, n, stepLength)
+            steppedValues = [self.shuffledDeck[i] for i in positions]
+            numberOfSteps = len(steppedValues)
+            streakLengthExponent = 2.0
+            streakStart = 2
+            
+            if numberOfSteps < 4:
+                continue
+                
+            total_score = 0.0
+            streak = 0
+            
+            for i in range(numberOfSteps - 1):
+                
+                curr_col = CardColor(steppedValues[i])
+                next_col = CardColor(steppedValues[i + 1])
+                
+                sameColor = curr_col == next_col
+                
+                if sameColor:
+                    streak += 1
+                else:
+                    if streak > streakStart:
+                        total_score += (streak - streakStart) ** streakLengthExponent
+                    streak = 0
+            
+            # handle final streak
+            if streak > streakStart:
+                total_score += (streak - streakStart) ** streakLengthExponent
+            
+
+            if stepLength == 1:
+                maxTrend = 2 * ((n/2 - 1) - streakStart) ** streakLengthExponent
+            else:
+                maxTrend = ((numberOfSteps - 1) - streakStart) ** streakLengthExponent
+                
+            shape = 1.0
+            trendScore = (1 - total_score / maxTrend) ** shape
+            scores.append(trendScore)
+            
+            #print("L: "+ str(stepLength) + " : " + str(trendScore))
+            
+        score = min(scores)
+        #print(score)
+        return score
+    """
+    def _suit_pattern_score(self):
+        
+        n = len(self.initialDeck)
+        if n < 2: 
+            return 0.0
+        
+        scores = []
+        minStepLength = 2
+        maxStepLength = 11
+        
+        for stepLength in range(minStepLength, maxStepLength):
+            
+            positions = range(0, n, stepLength)
+            steppedValues = [self.shuffledDeck[i] for i in positions]
+            numberOfSteps = len(steppedValues)
+            streakLengthExponent = 2.0
+            streakStart = 2
+            
+            if numberOfSteps < 4:
+                continue
+                
+            total_score = 0.0
+            streak = 0
+            
+            for i in range(numberOfSteps - 1):
+                
+                curr_suit = CardSuit(steppedValues[i])
+                next_suit = CardSuit(steppedValues[i + 1])
+                
+                sameSuit = curr_suit == next_suit
+                
+                if sameSuit:
+                    streak += 1
+                else:
+                    if streak > streakStart:
+                        total_score += (streak - streakStart) ** streakLengthExponent
+                    streak = 0
+            
+            # handle final streak
+            if streak > streakStart:
+                total_score += (streak - streakStart) ** streakLengthExponent
+            
+
+            if stepLength == 1:
+                maxTrend = 4 * ((numberOfSteps/4 - 1) - streakStart) ** streakLengthExponent
+            elif stepLength == 2:
+                maxTrend = 2 * ((numberOfSteps/2 - 1) - streakStart) ** streakLengthExponent
+            else:
+                maxTrend = ((numberOfSteps - 1) - streakStart) ** streakLengthExponent
+                
+            shape = 1.0
+            trendScore = (1 - total_score / maxTrend) ** shape
+            scores.append(trendScore)
+            
+            #print("L: "+ str(stepLength) + " : " + str(trendScore))
+            
+        score = min(scores)
+        #print(score)
+        return score        
     
 settings = {
     "shuffle": "Riffle Shuffle",
@@ -663,8 +782,9 @@ def ExpectedIdealSimulator(n, trials=1000):
         shuffledDeck = FisherYates(initialDeck)
 
         score = Score(shuffledDeck, initialDeck)
-        total1 += score.consecutiveTrendScore
-        values.append(score.consecutiveTrendScore)
+        score1 = score.colorPatternScore
+        total1 += score1
+        values.append(score1)
     
     expectedMean = total1 / trials
     print(expectedMean)
@@ -672,13 +792,21 @@ def ExpectedIdealSimulator(n, trials=1000):
     plt.show()
     return
 
-def CardSuit(n):
-    n = n % 52
-    return SUITS[n // 13]
+def CardSuit(c):
+    c = c % 52
+    return SUITS[c // 13]
 
-def CardRank(n):
-    n = n % 52
-    return RANKS[n % 13]
+def CardRank(c):
+    c = c % 52
+    return RANKS[c % 13]
+
+def CardColor(c):
+    suit = CardSuit(c)
+    if suit == "S" or suit == "C":
+        color = "B"
+    elif suit == "D" or suit == "H":
+        color = "R"
+    return color
 
 def Draw_text(text, font, text_col, x, y):
     img = font.render(text, True, text_col)
@@ -1186,13 +1314,12 @@ while running:
                             if button.value == False:
                                 deck, score = Shuffle(deck, settings, deckHistory)
                                 button.value = True
-                                #score._stepped_trend_score2()
                         elif button.name == "reset":
                             if button.value == False:
                                 deck, startDeck, deckHistory, score = InitializeDeck(settings["deckSize"])
                                 deckGenerated = True
                                 button.value = True
-                                #ExpectedIdealSimulator(52, 100000)
+                                #ExpectedIdealSimulator(52, 10000)
                         elif button.name == "assign shuffle":
                             button.nextValue()
                             settings["shuffle"] = button.value
@@ -1238,21 +1365,21 @@ while running:
     Draw_text(str(int(score.absoluteDistanceScore * 100)) + "% :Absolut distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 10)
     Draw_text(str(int(score.relativeDistanceScore * 100)) + "% :Relative distance score", FONT, BLACK, settingsTabX + 10, settingsTabY + 30)
     Draw_text(str(int(score.orderScore * 100)) + "% :Order score", FONT, BLACK, settingsTabX + 10, settingsTabY + 50)
+    Draw_text(str(int(score.consecutiveTrendScore * 100)) + "% :Consecutive trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 70)
+    Draw_text(str(int(score.linearPatternScore * 100)) + "% :Linear pattern score", FONT, BLACK, settingsTabX + 10, settingsTabY + 90)
     
-    Draw_text(str(int(score.consecutiveTrendScore * 100)) + "% :Consecutive trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 90)
-    Draw_text(str(int(score.linearPatternScore * 100)) + "% :Stepped trend score", FONT, BLACK, settingsTabX + 10, settingsTabY + 110)
+    Draw_text(str(int(score.repeatingRankScore * 100)) + "% :Repeating rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 130)
+    Draw_text(str(int(score.trendingRankScore * 100)) + "% :Trending rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 150)
     
-    Draw_text(str(int(score.repeatingRankScore * 100)) + "% :Consecutive rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 150)
-    Draw_text(str(int(score.repeatingSuitScore * 100)) + "% :Consecutive suit score", FONT, BLACK, settingsTabX + 10, settingsTabY + 170)
-    Draw_text(str(int(score.repeatingColorScore * 100)) + "% :Consecutive color score", FONT, BLACK, settingsTabX + 10, settingsTabY + 190)
-    Draw_text(str(int(score.trendingRankScore * 100)) + "% :Trending rank score", FONT, BLACK, settingsTabX + 10, settingsTabY + 210)
+    Draw_text(str(int(score.repeatingSuitScore * 100)) + "% :Repeating suit score", FONT, BLACK, settingsTabX + 10, settingsTabY + 190)
+    Draw_text(str(int(score.suitPatternScore * 100)) + "% :Suit pattern score", FONT, BLACK, settingsTabX + 10, settingsTabY + 210)
     
-    Draw_text(str(int(score.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 250)
-    Draw_text(str(int(score.humanScore * 100)) + "% :Human score", FONT, BLACK, settingsTabX + 10, settingsTabY + 270)
+    Draw_text(str(int(score.repeatingColorScore * 100)) + "% :Repeating color score", FONT, BLACK, settingsTabX + 10, settingsTabY + 250)
+    #Draw_text(str(int(score.colorPatternScore * 100)) + "% :Color pattern score", FONT, BLACK, settingsTabX + 10, settingsTabY + 270)
     
-    #DisplayByRank(deck, 300)
-    #DisplayBySuit(deck, 150)
-    #DisplayByOrder(deck, 10)
+    Draw_text(str(int(score.totalScore * 100)) + "% :Total score", FONT, BLACK, settingsTabX + 10, settingsTabY + 310)
+    Draw_text(str(int(score.humanScore * 100)) + "% :Human score", FONT, BLACK, settingsTabX + 10, settingsTabY + 330)
+    
     
     DisplayDeckHistory(deckHistory, settings["displayType"])
     
