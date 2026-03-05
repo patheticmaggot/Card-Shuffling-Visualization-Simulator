@@ -32,5 +32,7 @@ buttons = {
     "change view": Button((utilities.settingsTabX + 10), (utilities.settingsTabHeight - 145), 200, 25, "change view", utilities.VIEWS, True, True),
     "assign shuffle": Button((utilities.settingsTabX + 10), (utilities.settingsTabHeight - 95), 200, 25, "assign shuffle", utilities.SHUFFLES, True, True),
     "shuffle": Button((utilities.settingsTabX + 10), (utilities.settingsTabHeight - 60), 110, 50, "shuffle", [False, True], True, False),
-    "reset": Button((utilities.settingsTabX + 130), (utilities.settingsTabHeight - 60), 110, 50, "reset", [False, True], True, False)
+    "reset": Button((utilities.settingsTabX + 130), (utilities.settingsTabHeight - 60), 110, 50, "reset", [False, True], True, False),
+    "queue": Button((utilities.settingsTabX + 130), (utilities.settingsTabHeight - 190), 25, 25, "queue", [False, True], True, False),
+    "remove": Button((utilities.settingsTabX + 190), (utilities.settingsTabHeight - 190), 25, 25, "remove", [False, True], True, False)
 }

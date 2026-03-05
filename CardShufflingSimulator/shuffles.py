@@ -1,5 +1,6 @@
 import random
 import scoring
+import utilities as uti
 
 def CutIndex(n, offset, accuracy):
     targetCut = offset * n
@@ -32,50 +33,53 @@ def Shuffle(deck, settings, deckHistory):
     
     startDeck = deckHistory[0]["deck"].copy()
     
-    if settings["shuffle"] == "Cut Deck":
-        shuffledDeck = CutDeck(deck, settings["offset"], settings["accuracy"])
-        score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Cut Deck"
+    if uti.queue:
+        shuffle = uti.queue[0]["shuffle"]
+        print("\nShuffle from queue: " + str(shuffle))
+        accuracy = uti.queue[0]["accuracy"]
+        print("accuracy: " + str(accuracy))
+        offset = uti.queue[0]["offset"]
+        print("offset: " + str(offset))
+        inOutRand = uti.queue[0]["inOutRand"]
         
-    elif settings["shuffle"] == "Riffle Shuffle":
-        shuffledDeck = RiffleShuffle(deck, settings["offset"], settings["accuracy"], settings["inOutRand"])
+        uti.queue.append(uti.queue.pop(0))
+        print("\nNext in queue:" + str(uti.queue[0]["shuffle"]))
+        uti.UpdateQueuemarkers()
+    else:
+        shuffle = settings["shuffle"]
+        accuracy = settings["accuracy"]
+        offset = settings["offset"]
+        inOutRand = settings["inOutRand"]
+    
+    
+    
+    if shuffle == "Cut Deck":
+        shuffledDeck = CutDeck(deck, offset, accuracy)
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Riffle Shuffle"
-        
-    elif settings["shuffle"] == "Computer Shuffle":
+    elif shuffle == "Riffle Shuffle":
+        shuffledDeck = RiffleShuffle(deck, offset, accuracy, inOutRand)
+        score = scoring.Score(shuffledDeck, startDeck)
+    elif shuffle == "Computer Shuffle":
         shuffledDeck = ComputerRandomShuffle(deck)
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Computer Shuffle"
-        
-    elif settings["shuffle"] == "Reverse Cards":
+    elif shuffle == "Reverse Cards":
         shuffledDeck = ReverseDeck(deck)
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Reverse Cards"
-        
-    elif settings["shuffle"] == "Fisher-Yates Shuffle":
+    elif shuffle == "Fisher-Yates Shuffle":
         shuffledDeck = FisherYates(deck)
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Fisher-Yates Shuffle"
-        
-    elif settings["shuffle"] == "Milk Shuffle":
-        shuffledDeck = MilkShuffle(deck, settings["accuracy"])
+    elif shuffle == "Milk Shuffle":
+        shuffledDeck = MilkShuffle(deck, accuracy)
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Milk Shuffle"
-        
-    elif settings["shuffle"] == "Overhand Shuffle":
-        shuffledDeck = OverhandShuffle(deck, settings["accuracy"])
+    elif shuffle == "Overhand Shuffle":
+        shuffledDeck = OverhandShuffle(deck, accuracy)
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Overhand Shuffle"
-        
-    elif settings["shuffle"] == "Over-Under Shuffle":
-        shuffledDeck = OverUnderShuffle(deck, settings["accuracy"], settings["inOutRand"])
+    elif shuffle == "Over-Under Shuffle":
+        shuffledDeck = OverUnderShuffle(deck, accuracy, inOutRand)
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Over-Under Shuffle"
-        
     else:
         shuffledDeck = deck
         score = scoring.Score(shuffledDeck, startDeck)
-        shuffle = "Unknown shuffle"
     
     
     deckHistory.append({
@@ -84,6 +88,9 @@ def Shuffle(deck, settings, deckHistory):
         "settings": settings.copy(),
         "score": score
     })
+    
+    
+    
     return shuffledDeck, score
 
 
@@ -176,10 +183,11 @@ def OverUnderShuffle(deck, accuracy, inOutRand):
     initialDeck = deck[:]
     shuffledDeck = []
     
-    if (inOutRand == "i"):
-        useTop = True
-    elif (inOutRand == "o"):
-        useTop = False
+    if accuracy == 1.0:
+        if (inOutRand == "i"):
+            useTop = True
+        elif (inOutRand == "o"):
+            useTop = False
     else:
         useTop = random.choice([True, False])
         
@@ -230,17 +238,19 @@ def RiffleShuffle(deck, offset, accuracy, inOutRand):
     
     # Make the accuracy of the cut index to change between 90-100 accuracy since since the cut is ment to be done exactly at the middle
     cutIndex = CutIndex(n, offset, (0.90 + 0.10 * accuracy))
-    
+    #print("Cut index: " + str(cutIndex))
     top = deck[cutIndex:]
     bottom = deck[:cutIndex]
     
     ti = 0  # Top half Index
     bi = 0  # Bottom half Index
     
-    if (inOutRand == "i"):
-        useTop = True
-    elif (inOutRand == "o"):
-        useTop = False
+    if accuracy == 1.0:
+        
+        if (inOutRand == "i"):
+            useTop = True
+        elif (inOutRand == "o"):
+            useTop = False
     else:
         useTop = random.choice([True, False])
     
@@ -295,7 +305,7 @@ def CutDeck(deck, offset, accuracy):
     
     cutIndex = CutIndex(n, offset, accuracy)
     
-    print("Cut index: " + str(cutIndex))
+    #print("Cut index: " + str(cutIndex))
     top = deck[:cutIndex]
     bottom = deck[cutIndex:]
     

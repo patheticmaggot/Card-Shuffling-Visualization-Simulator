@@ -18,6 +18,6 @@ class Slider:
         utilities.Draw_text(str(int(self.value * 100)) + "%", utilities.FONT, utilities.BLACK, (self.slider.x + self.slider.width), self.slider.y)
 
 sliders = {
-    "accuracy": Slider((utilities.settingsTabX + 10), utilities.settingsTabHeight - 260, 200, 25, "accuracy"),
-    "offset": Slider((utilities.settingsTabX + 10), utilities.settingsTabHeight - 220, 200, 25, "offset"),
+    "accuracy": Slider((utilities.settingsTabX + 10), utilities.settingsTabHeight - 280, 200, 25, "accuracy"),
+    "offset": Slider((utilities.settingsTabX + 10), utilities.settingsTabHeight - 240, 200, 25, "offset"),
 }

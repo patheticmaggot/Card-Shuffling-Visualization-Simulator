@@ -5,6 +5,7 @@ import utilities as uti
 import shuffles as shuff
 import button as but
 import slider as sli
+import marker as mar
 import display
 
 pygame.display.set_caption("Shuffling simulator")
@@ -65,6 +66,14 @@ def main():
                                 button.nextValue()
                                 uti.settings["displayType"] = button.value
                                 print("Selected view: " + str(button.value))
+                            elif button.name == "queue":
+                                if button.value == False:
+                                    uti.QueueShuffle()
+                                    button.value = True
+                            elif button.name == "remove":
+                                if button.value == False:
+                                    uti.RemoveShuffle()
+                                    button.value = True
                                 
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
@@ -74,6 +83,13 @@ def main():
                     elif but.buttons["reset"].value == True:
                         but.buttons["reset"].value = False
                         but.buttons["reset"].valueIndex = 1
+                    elif but.buttons["queue"].value == True:
+                        but.buttons["queue"].value = False
+                        but.buttons["queue"].valueIndex = 1
+                    elif but.buttons["remove"].value == True:
+                        but.buttons["remove"].value = False
+                        but.buttons["remove"].valueIndex = 1
+                        
         
         if mouse_held[0]:
             for slider in sli.sliders.values():
@@ -86,18 +102,22 @@ def main():
             slider.draw(uti.SCREEN, uti.GREY, uti.DARK_GREY)
         
         for button in but.buttons.values():
-            if button.name == "shuffle":
+            if button.name == "shuffle" or button.name == "reset":
                 if button.value == False:
                     button.draw(uti.SCREEN, uti.GREY, 10, 10, 0, 0)
                 else:
                     button.draw(uti.SCREEN, uti.DARK_GREY, 10, 15, 0, 0)
-            elif button.name == "reset":
+            elif button.name == "queue" or button.name == "remove":
                 if button.value == False:
-                    button.draw(uti.SCREEN, uti.GREY, 10, 10, 0, 0)
+                    button.draw(uti.SCREEN, uti.GREY, 4, 4, 0, 0)
                 else:
-                    button.draw(uti.SCREEN, uti.DARK_GREY, 10, 15, 0, 0)
+                    button.draw(uti.SCREEN, uti.DARK_GREY, 5, 5, 0, 0)
             else:
                 button.draw(uti.SCREEN, uti.GREY, 0, -25, 5, 0)
+                
+        if mar.markers:
+            for marker in mar.markers:
+                marker.Draw(uti.SCREEN, marker.color, marker.name)
                 
         uti.Draw_text(str(int(score.absoluteDistanceScore * 100)) + "% :Absolut distance score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 10)
         uti.Draw_text(str(int(score.relativeDistanceScore * 100)) + "% :Relative distance score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 30)
@@ -105,14 +125,13 @@ def main():
         uti.Draw_text(str(int(score.consecutiveTrendScore * 100)) + "% :Consecutive trend score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 70)
         uti.Draw_text(str(int(score.linearPatternScore * 100)) + "% :Linear pattern score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 90)
         
-        uti.Draw_text(str(int(score.repeatingRankScore * 100)) + "% :Repeating rank score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 130)
-        uti.Draw_text(str(int(score.trendingRankScore * 100)) + "% :Trending rank score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 150)
+        uti.Draw_text(str(int(score.edgePreservationScore * 100)) + "% :Edge preservation score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 130)
         
-        uti.Draw_text(str(int(score.repeatingSuitScore * 100)) + "% :Repeating suit score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 190)
-        uti.Draw_text(str(int(score.suitPatternScore * 100)) + "% :Suit pattern score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 210)
-        
+        uti.Draw_text(str(int(score.repeatingRankScore * 100)) + "% :Repeating rank score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 170)
+        uti.Draw_text(str(int(score.trendingRankScore * 100)) + "% :Trending rank score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 190)
+        uti.Draw_text(str(int(score.repeatingSuitScore * 100)) + "% :Repeating suit score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 210)
+        uti.Draw_text(str(int(score.suitPatternScore * 100)) + "% :Suit pattern score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 230)
         uti.Draw_text(str(int(score.repeatingColorScore * 100)) + "% :Repeating color score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 250)
-        #uti.Draw_text(str(int(score.colorPatternScore * 100)) + "% :Color pattern score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 270)
         
         uti.Draw_text(str(int(score.totalScore * 100)) + "% :Total score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 310)
         uti.Draw_text(str(int(score.humanScore * 100)) + "% :Human score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 330)

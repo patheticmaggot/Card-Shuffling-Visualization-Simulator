@@ -15,7 +15,8 @@ class Score:
                  w_color = 0.25,
                  w_TRank = 0.25,
                  #w_copa = 0.25,
-                 w_supa = 0.25
+                 w_supa = 0.25,
+                 w_edge = 0.25
                  ):
         
         self.shuffledDeck = shuffledDeck
@@ -34,6 +35,7 @@ class Score:
         self.w_TRank = w_TRank
         #self.w_copa = w_copa
         self.w_supa = w_supa
+        self.w_edge = w_edge
 
         # compute individual scores
         self.absoluteDistanceScore = self._absolute_distance_score()
@@ -41,12 +43,15 @@ class Score:
         self.orderScore = self._order_score()
         self.consecutiveTrendScore = self._consecutive_trend_score()
         self.linearPatternScore = self._linear_pattern_score()
+        
         self.repeatingRankScore = self._repeating_rank_score()
         self.repeatingSuitScore = self._repeating_suit_score()
         self.repeatingColorScore = self._repeating_color_score()
         self.trendingRankScore = self._trending_rank_score()
         #self.colorPatternScore = self._color_pattern_score()
         self.suitPatternScore = self._suit_pattern_score()
+        
+        self.edgePreservationScore = self._edge_preservation_score()
 
         # compute total score
         self.totalScore = self._total_score()
@@ -71,7 +76,8 @@ class Score:
         self.relativeDistanceScore,
         self.orderScore,
         self.consecutiveTrendScore,
-        self.linearPatternScore
+        self.linearPatternScore,
+        self.edgePreservationScore
         ]
 
 
@@ -80,7 +86,8 @@ class Score:
         self.w_rel,
         self.w_order,
         self.w_cons,
-        self.w_lipa
+        self.w_lipa,
+        self.w_edge
         ]
 
 
@@ -105,7 +112,8 @@ class Score:
             self.repeatingColorScore,
             self.trendingRankScore,
             #self.colorPatternScore,
-            self.suitPatternScore
+            self.suitPatternScore,
+            self.edgePreservationScore
         ]
         
         weights = [
@@ -114,7 +122,8 @@ class Score:
             self.w_color,
             self.w_TRank,
             #self.w_copa,
-            self.w_supa
+            self.w_supa,
+            self.w_edge
         ]
         
         eps = self.eps
@@ -129,6 +138,39 @@ class Score:
         return (num / den) ** (1 / p)
 
     # ---------- component scores ----------
+    
+    def _edge_preservation_score(self):
+        
+        n = len(self.initialDeck)   # Initial decks length
+        
+        # Create a dictionary to get the indexes of the shuffled numbers in the shuffled deck
+        position = {card: i for i, card in enumerate(self.shuffledDeck)}
+
+        # Add up every distence between the initial position of the card and the shuffled position of that same card
+        totalDistance = 0
+        totalWeight = 0
+        trackDistance = 6
+        
+        worstDistance = 0
+        
+        for i, card in enumerate(self.initialDeck):
+            distance = min(abs(i - position[card]), trackDistance)
+            invDistance = 1 - (distance / trackDistance)
+            
+            weight = 1 / (min((i + 1), (n + 1) - (i + 1)))
+            totalDistance += invDistance * weight
+            totalWeight += weight
+            
+            worstDistance = max(invDistance * weight, worstDistance)
+
+        meanDistance = totalDistance / totalWeight
+        
+        meanScore = 1 - meanDistance
+        worstScore = 1 - worstDistance
+        
+        edgePreservationScore = 0.5 * meanScore + 0.5 * worstScore # Half of the score comes from the average from cards weighted to the sides and the other half from the worst offender (usually a top or bottom card not moving at all)
+        
+        return edgePreservationScore
     
     def _absolute_distance_score(self):
         

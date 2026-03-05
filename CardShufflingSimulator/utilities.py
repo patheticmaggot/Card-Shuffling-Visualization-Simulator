@@ -2,6 +2,7 @@ import scoring
 import matplotlib.pyplot as plt
 import shuffles
 import pygame
+import marker as m
 
 SCREEN_WIDTH = 1138
 SCREEN_HEIGHT = 640
@@ -31,7 +32,9 @@ clock = pygame.time.Clock()
 deckGenerated = False
 deck = []
 startDeck = []
+
 deckHistory = []
+queue = []
 
 SHUFFLES = ["Riffle Shuffle", 
             "Milk Shuffle", 
@@ -66,7 +69,7 @@ def ExpectedIdealSimulator(n, trials=1000):
         shuffledDeck = shuffles.FisherYates(initialDeck)
 
         score = scoring.Score(shuffledDeck, initialDeck)
-        score1 = score.repeatingColorScore
+        score1 = score.edgePreservationScore
         total1 += score1
         values.append(score1)
     
@@ -108,5 +111,64 @@ def InitializeDeck(n):
     "score": score
     }]
     
+    UpdateQueuemarkers()
     
     return deck, startDeck, deckHistory, score
+
+def QueueShuffle():
+    queue.append({
+        "shuffle": settings["shuffle"],
+        "accuracy": settings["accuracy"],
+        "offset": settings["offset"],
+        "inOutRand": settings["inOutRand"]
+    })
+    
+    UpdateQueuemarkers()
+    
+    print(len(queue))
+
+def RemoveShuffle():
+    if not queue:
+        return
+    queue.pop()
+    
+    UpdateQueuemarkers()
+    
+    print(len(queue))
+
+def UpdateQueuemarkers():
+    if not queue:
+        m.markers.clear()
+        return
+    
+    m.markers.clear()
+    
+    x = settingsTabX + 10
+    y = settingsTabHeight - 190
+    width = 25
+    height = 25
+    dispalyAmount = 4
+    
+    for item in queue[:dispalyAmount]:
+        
+        if item["shuffle"] == "Riffle Shuffle":
+            color = (255, 0, 38)
+        elif item["shuffle"] == "Milk Shuffle":
+            color = (242, 233, 234)
+        elif item["shuffle"] == "Overhand Shuffle":
+            color = (64, 64, 255)
+        elif item["shuffle"] == "Over-Under Shuffle":
+            color = (2, 2, 110)
+        elif item["shuffle"] == "Cut Deck":
+            color = (170, 54, 247)
+        elif item["shuffle"] == "Reverse Cards":
+            color = (138, 138, 138)
+        elif item["shuffle"] == "Computer Shuffle":
+            color = (82, 82, 82)
+        elif item["shuffle"] == "Fisher-Yates Shuffle":
+            color = (0, 0, 0)
+        
+        m.markers.append(m.Marker(item["shuffle"], color, x, y, width, height))
+        
+        x += width + 5
+    
