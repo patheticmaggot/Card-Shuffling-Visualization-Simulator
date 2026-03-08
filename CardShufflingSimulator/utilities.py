@@ -158,9 +158,9 @@ def UpdateQueuemarkers():
         elif item["shuffle"] == "Overhand Shuffle":
             color = (64, 64, 255)
         elif item["shuffle"] == "Over-Under Shuffle":
-            color = (2, 2, 110)
+            color = (77, 175, 74)
         elif item["shuffle"] == "Cut Deck":
-            color = (170, 54, 247)
+            color = (255, 255, 0)
         elif item["shuffle"] == "Reverse Cards":
             color = (138, 138, 138)
         elif item["shuffle"] == "Computer Shuffle":
