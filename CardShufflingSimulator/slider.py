@@ -1,7 +1,7 @@
 import pygame
 import utilities
 
-
+# A class for the sliders that controll the accuracy and offset
 class Slider:
     def __init__(self, posX, posY, width, height, name):
         self.slider = pygame.Rect(posX, posY, width, height)
@@ -10,13 +10,14 @@ class Slider:
         self.maxX = self.slider.x + self.slider.width - self.handle.width
         self.value = 0.0
         self.name = name
-        
+    # Draw the slider    
     def draw(self, screen, color1, color2):
         pygame.draw.rect(screen, color1, self.slider)
         pygame.draw.rect(screen, color2, self.handle)
         utilities.Draw_text(self.name, utilities.FONT, utilities.BLACK, (self.slider.x + 5), self.slider.y)
         utilities.Draw_text(str(int(self.value * 100)) + "%", utilities.FONT, utilities.BLACK, (self.slider.x + self.slider.width), self.slider.y)
 
+# Slider storage
 sliders = {
     "accuracy": Slider((utilities.settingsTabX + 10), utilities.settingsTabHeight - 280, 200, 25, "accuracy"),
     "offset": Slider((utilities.settingsTabX + 10), utilities.settingsTabHeight - 240, 200, 25, "offset"),

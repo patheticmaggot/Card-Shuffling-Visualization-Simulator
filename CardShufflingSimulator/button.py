@@ -1,7 +1,7 @@
 import pygame
 import utilities
 
-
+# A class for any clickable button 
 class Button:
     def __init__(self, posX, posY, width, height, name, values, nameText, valueText):
         self.button = pygame.Rect(posX, posY, width, height)
@@ -12,11 +12,13 @@ class Button:
         
         self.valueIndex = 0
         self.value = self.values[self.valueIndex]
-    
+        
+    # Changes the buttons value to the next value on the list that is initialized
     def nextValue(self):
         self.valueIndex = (self.valueIndex + 1) % len(self.values)
         self.value = self.values[self.valueIndex]
     
+    # Draws the button
     def draw(self, screen, color, textNameX, textNameY, textValuex, textValueY):
         pygame.draw.rect(screen, color, self.button)
         if self.nameText and self.valueText:
@@ -27,7 +29,7 @@ class Button:
         elif not self.nameText and self.valueText:
             utilities.Draw_text(str(self.value), utilities.FONT, utilities.BLACK, self.button.x + textValuex, self.button.y + textValueY)
 
-
+# Button storage
 buttons = {
     "change view": Button((utilities.settingsTabX + 10), (utilities.settingsTabHeight - 145), 200, 25, "change view", utilities.VIEWS, True, True),
     "assign shuffle": Button((utilities.settingsTabX + 10), (utilities.settingsTabHeight - 95), 200, 25, "assign shuffle", utilities.SHUFFLES, True, True),

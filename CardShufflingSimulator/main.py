@@ -12,7 +12,7 @@ pygame.display.set_caption("Shuffling simulator")
 
 
 def main():
-    deck, startDeck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
+    deck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
     deckGenerated = True
 
     running = True
@@ -29,52 +29,66 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
+            # Keyboard controls
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_1:
                     if not deckGenerated:
-                        deck, startDeck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
+                        deck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
                         deckGenerated = True
                     deck, score = shuff.Shuffle(deck, uti.settings, deckHistory)
 
                 elif event.key == pygame.K_r:
-                    deck, startDeck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
+                    deck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
                     deckGenerated = True
 
                 elif event.key == pygame.K_q:
                     running = False
-                    
+            
+            # Button presses
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     for button in but.buttons.values():
                         if button.button.collidepoint(event.pos):
                             
+                            # Shuffle the deck button
                             if button.name == "shuffle":
                                 if button.value == False:
                                     deck, score = shuff.Shuffle(deck, uti.settings, deckHistory)
                                     button.value = True
+                            
+                            # Reset the deck button
                             elif button.name == "reset":
                                 if button.value == False:
-                                    deck, startDeck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
+                                    deck, deckHistory, score = uti.InitializeDeck(uti.settings["deckSize"])
                                     deckGenerated = True
                                     button.value = True
                                     #uti.ExpectedIdealSimulator(52, 10000)
+                            
+                            # Change shuffles button        
                             elif button.name == "assign shuffle":
                                 button.nextValue()
                                 uti.settings["shuffle"] = button.value
                                 print("Selected shuffle: " + str(button.value))
+                            
+                            # Change display type of the deck button
                             elif button.name == "change view":
                                 button.nextValue()
                                 uti.settings["displayType"] = button.value
                                 print("Selected view: " + str(button.value))
+                            
+                            # Queue a shuffle button
                             elif button.name == "queue":
                                 if button.value == False:
                                     uti.QueueShuffle()
                                     button.value = True
+                            
+                            # Remove a shuffle from the queue button        
                             elif button.name == "remove":
                                 if button.value == False:
                                     uti.RemoveShuffle()
                                     button.value = True
-                                
+            
+            # Change buttons value back to false if mouse button is lifted                    
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
                     if but.buttons["shuffle"].value == True:
@@ -90,17 +104,15 @@ def main():
                         but.buttons["remove"].value = False
                         but.buttons["remove"].valueIndex = 1
                         
-        
+        # Slider logic
         if mouse_held[0]:
             for slider in sli.sliders.values():
                 if slider.slider.collidepoint(mouse_x, mouse_y):
                     slider.handle.x = max(slider.minX, min(slider.maxX, mouse_x - slider.handle.width // 2))
                     slider.value = (slider.handle.x - slider.minX) / (slider.maxX - slider.minX)
                     uti.settings[slider.name] = slider.value
-
-        for slider in sli.sliders.values():
-            slider.draw(uti.SCREEN, uti.GREY, uti.DARK_GREY)
-        
+                    
+        # Button drawing
         for button in but.buttons.values():
             if button.name == "shuffle" or button.name == "reset":
                 if button.value == False:
@@ -114,11 +126,18 @@ def main():
                     button.draw(uti.SCREEN, uti.DARK_GREY, 5, 5, 0, 0)
             else:
                 button.draw(uti.SCREEN, uti.GREY, 0, -25, 5, 0)
-                
+        
+        # Slider drawing
+        for slider in sli.sliders.values():
+            slider.draw(uti.SCREEN, uti.GREY, uti.DARK_GREY)
+        
+        # Queue marker drawing        
         if mar.markers:
             for marker in mar.markers:
                 marker.Draw(uti.SCREEN, marker.color, marker.name)
-                
+        
+        
+        # Score drawing        
         uti.Draw_text(str(int(score.absoluteDistanceScore * 100)) + "% :Absolut distance score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 10)
         uti.Draw_text(str(int(score.relativeDistanceScore * 100)) + "% :Relative distance score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 30)
         uti.Draw_text(str(int(score.orderScore * 100)) + "% :Order score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 50)
@@ -136,7 +155,7 @@ def main():
         uti.Draw_text(str(int(score.totalScore * 100)) + "% :Total score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 310)
         uti.Draw_text(str(int(score.humanScore * 100)) + "% :Human score", uti.FONT, uti.BLACK, uti.settingsTabX + 10, uti.settingsTabY + 330)
         
-        
+        # Deck drawing
         display.DisplayDeckHistory(deckHistory, uti.settings["displayType"])
         
         pygame.display.flip()

@@ -1,5 +1,6 @@
 import utilities
 
+# A class to score a given deck for its shuffleness with either comparing to the original deck or just by the shuffled deck
 class Score:
     def __init__(self, 
                  shuffledDeck, 
@@ -21,23 +22,23 @@ class Score:
         
         self.shuffledDeck = shuffledDeck
         self.initialDeck = initialDeck
-        self.eps = eps
+        self.eps = eps  # Small number to not get 0
 
         # weights
-        self.w_abs = w_abs
-        self.w_rel = w_rel
-        self.w_order = w_order
-        self.w_cons = w_cons
-        self.w_lipa = w_lipa
-        self.w_reank = w_rank
-        self.w_suit = w_suit
-        self.w_color = w_color
-        self.w_TRank = w_TRank
-        #self.w_copa = w_copa
-        self.w_supa = w_supa
-        self.w_edge = w_edge
+        self.w_abs = w_abs      # Absolute distance weight
+        self.w_rel = w_rel      # Realtive distance weight
+        self.w_order = w_order  # Order weight
+        self.w_cons = w_cons    # Consecutive trend weight
+        self.w_lipa = w_lipa    # Linear pattern weight
+        self.w_rank = w_rank    # Repeating rank weight
+        self.w_suit = w_suit    # Reapeating suit weight
+        self.w_color = w_color  # Repeating color weight
+        self.w_TRank = w_TRank  # Trending rank weight
+        #self.w_copa = w_copa   # Color pattern weight
+        self.w_supa = w_supa    # Suit pattern weight
+        self.w_edge = w_edge    # Edge preservation weight
 
-        # compute individual scores
+        # Compute individual scores
         self.absoluteDistanceScore = self._absolute_distance_score()
         self.relativeDistanceScore = self._relative_distance_score()
         self.orderScore = self._order_score()
@@ -53,14 +54,18 @@ class Score:
         
         self.edgePreservationScore = self._edge_preservation_score()
 
-        # compute total score
+        # Compute combined scores
         self.totalScore = self._total_score()
         self.humanScore = self._human_score()
 
-    # ---------- total score ----------
+
+    # ---------- combined scores ----------
+    
+    # Edge preservation is in both since it is and "under the hood" score and an intuitive score for humans.
+    
     def _total_score(self, p=-6):
         """
-        Combines the other scores to one score.
+        Combining the scores that compare to the original deck or use things not seen by humans to score the deck (what happens under the hood)
         
         - Total score gets punished hard if one score is bad
         - p determines how hard small scores punish the total
@@ -95,16 +100,28 @@ class Score:
         num = 0.0
         den = 0.0
 
-
+        
         for s, w in zip(scores, weights):
-            s = max(s, eps) # estää nollan ja logiikka-ongelmat
-            num += w * (s ** p) # painotettu potenssi
+            s = max(s, eps)
+            num += w * (s ** p)
             den += w
 
 
         return (num / den) ** (1 / p)
     
+    # Combining scores that are intuitive for humans like colors ranks and suits and also edge most cards since you can remember what was on top or bottom.
     def _human_score(self, p=-6):
+        
+        """
+        Combining scores that are intuitive for humans like colors ranks and suits and also edge most cards.
+        
+        - Human score gets punished hard if one score is bad
+        - p determines how hard small scores punish the total
+        - The scores have tunable weights to contol their importance
+        - Returns score in [0, 1]
+        - 0 = Atleast one of the scores in 0
+        - 1 = All of the scores are 1
+        """
         
         scores = [
             self.repeatingRankScore,
@@ -117,7 +134,7 @@ class Score:
         ]
         
         weights = [
-            self.w_reank,
+            self.w_rank,
             self.w_suit,
             self.w_color,
             self.w_TRank,
@@ -141,12 +158,20 @@ class Score:
     
     def _edge_preservation_score(self):
         
+        """
+        Scores how much the edge most cards have moved from their initial position with top and bottom card having the most importance
+        
+        - Score is and average of the weighted worst offender and the weighted mean of the other edge cards
+        - Returns score in [0, 1]
+        - 0 = cards on the same spots as in the original deck
+        - 1 = all of the edge cards are atleast 6 cards away from their original position 
+        """
+        
         n = len(self.initialDeck)   # Initial decks length
         
         # Create a dictionary to get the indexes of the shuffled numbers in the shuffled deck
         position = {card: i for i, card in enumerate(self.shuffledDeck)}
 
-        # Add up every distence between the initial position of the card and the shuffled position of that same card
         totalDistance = 0
         totalWeight = 0
         trackDistance = 6
@@ -168,7 +193,8 @@ class Score:
         meanScore = 1 - meanDistance
         worstScore = 1 - worstDistance
         
-        edgePreservationScore = 0.5 * meanScore + 0.5 * worstScore # Half of the score comes from the average from cards weighted to the sides and the other half from the worst offender (usually a top or bottom card not moving at all)
+        # Half of the score comes from the average from cards weighted to the sides and the other half from the worst offender (usually a top or bottom card not moving at all)
+        edgePreservationScore = 0.5 * meanScore + 0.5 * worstScore 
         
         return edgePreservationScore
     
@@ -251,7 +277,7 @@ class Score:
         - Scores the shuffled deck compared to the initial deck
         - Returns score in [0, 1]
         - 0 = everything is in their original place or reversed.
-        - 1 = The ideal expectation for a randomly shuffled deck
+        - 1 = The ideal expectation for a randomly shuffled deck (half of them have changed)
         
         """
         
@@ -273,17 +299,19 @@ class Score:
     
     
     def _consecutive_trend_score(self):
+        
         """
         Scores how strongly the deck exhibits long increasing or decreasing trends.
         
         - Scores the shuffled deck on its own doesnt care what the initial deck was
         - Any step size allowed to the same direction (ascending/descending) 
-        - Longer continuous trends contribute more weight with minimum length being 2 step trend
+        - Longer continuous trends contribute more weight with minimum length being 3 step trend
         - Shape variable determines how exponentially punishing longer trends are
         - Returns score in [0, 1]
         - 0 = whole deck is ascending or descending
         - 1 = after every card the trend direction changes
         """
+        
         n = len(self.initialDeck)
         if n < 2:
             return 0.0
@@ -327,10 +355,10 @@ class Score:
     def _linear_pattern_score(self):
         
         """
-        Scores how much the deck exhibits linear patterns e.g every 3rd card the card number rises by 4 for the whole deck then score = 0.
+        Scores how much the deck exhibits linear patterns e.g. every 3rd card the card number rises by 4 for the whole deck then score = 0.
         
         - Scores the shuffled deck on its own doesnt care what the initial deck was
-        - Looks trough every step height between 1 and n/2 (ascending/descending) for every step length that consist of at least 4 steps
+        - Looks trough every step height (ascending/descending) for every step length that consist of at least 4 steps
         - Longer continuous patterns contribute more weight with minimum length being 3 step trend and maximum the whole deck
         - Returns score in [0, 1]
         - 0 = Atleast one pattern of the checked step sizes (example: every 4th card is going [1, 3, 5, 7, 9...] through the whole deck)
@@ -402,6 +430,16 @@ class Score:
 
     def _repeating_rank_score(self):
         
+        """
+        Scores how much ranks repeat after eachother.
+        
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
+        - Checks every pair and scores how many pairs are the same rank.
+        - Returns score in [0, 1]
+        - 0 = all of the same rank are next to eachother e.g. "1,1,1,1,A,A,A,A,6,6,6,6"
+        - 1 = none of the same 4 ranks are next to each other
+        """
+        
         lastRank = None
         totalRepeats = 0
         
@@ -428,7 +466,17 @@ class Score:
         return rawScore #score
     
     def _repeating_suit_score(self):
-    
+        
+        """
+        Scores how much suit repeats after eachother
+        
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
+        - Checks every pair and scores how many pairs are the same suit.
+        - Returns score in [0, 1]
+        - 0 = all of the 13 of same suit are next to eachother e.g. "...H,H,H,H,H,H,S,S,S,S,S,S,S,..."
+        - 1 = the amount of suits that are not next to eachother is closest to 0.75 percent of the deck
+        """
+        
         lastSuit = None
         totalRepeats = 0
         
@@ -455,7 +503,17 @@ class Score:
         return score
     
     def _repeating_color_score(self):
-    
+        
+        """
+        Scores how much the 2 colors repeat after eachother.
+        
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
+        - Checks every pair and scores how many pairs are the same color.
+        - Returns score in [0, 1]
+        - 0 = all of the same color cards are next to eachother e.g. first the reds then the blacks
+        - 1 = half of the colors repeat half dont
+        """
+        
         lastColor = None
         currentColor = None
         totalRepeats = 0
@@ -485,6 +543,17 @@ class Score:
         return score
     
     def _trending_rank_score(self):
+        
+        """
+        Scores how much the ranks exhibit rising and decending trends
+        
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
+        - Any step size is counted (ascending/descending)
+        - longer trends contribute more weight.
+        - Returns score in [0, 1]
+        - 0 = the whole deck is a rising or decending trend of the ranks (card being the same rank as the previous still contributes to the trend)
+        - 1 = the deck has 79 percent of the pairs changing direction
+        """
         
         n = len(self.initialDeck)
         if n < 2:
@@ -536,6 +605,7 @@ class Score:
         
         return score
     """
+    # Ture random shows too much patterns for this to work
     def _color_pattern_score(self):
         
         n = len(self.initialDeck)
@@ -595,6 +665,17 @@ class Score:
         return score
     """
     def _suit_pattern_score(self):
+        
+        """
+        Scores how much the suits exhibit linear patterns e.g. every 3rd card the card suit is the same
+        
+        - Scores the shuffled deck on its own doesnt care what the initial deck was
+        - Looks trough every step length that consist of at least 4 steps
+        - Longer continuous patterns contribute more weight with minimum length being 3 step trend and maximum the whole deck (or with step=2 half deck one trend and other half the other trend)
+        - Returns score in [0, 1]
+        - 0 = Atleast one pattern goes trough the whole deck or with step size 2 half and half
+        - 1 = none of the patterns tried have a pattern for more than 3 cards
+        """
         
         n = len(self.initialDeck)
         if n < 2: 

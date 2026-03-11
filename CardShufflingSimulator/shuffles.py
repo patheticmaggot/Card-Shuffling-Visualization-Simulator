@@ -2,6 +2,7 @@ import random
 import scoring
 import utilities as uti
 
+
 def CutIndex(n, offset, accuracy):
     targetCut = offset * n
 
@@ -29,6 +30,9 @@ def CutIndex(n, offset, accuracy):
     return cutIndex
 
 
+# ---------- shuffles ----------
+
+# Shuffling the deck with current settings
 def Shuffle(deck, settings, deckHistory):
     
     startDeck = deckHistory[0]["deck"].copy()
@@ -74,8 +78,8 @@ def Shuffle(deck, settings, deckHistory):
     elif shuffle == "Overhand Shuffle":
         shuffledDeck = OverhandShuffle(deck, accuracy)
         score = scoring.Score(shuffledDeck, startDeck)
-    elif shuffle == "Over-Under Shuffle":
-        shuffledDeck = OverUnderShuffle(deck, accuracy, inOutRand)
+    elif shuffle == "Monge Shuffle":
+        shuffledDeck = MongeShuffle(deck, accuracy, inOutRand)
         score = scoring.Score(shuffledDeck, startDeck)
     else:
         shuffledDeck = deck
@@ -93,8 +97,13 @@ def Shuffle(deck, settings, deckHistory):
     
     return shuffledDeck, score
 
-
+# A shuffle where you take clumps from the top and the bottom
 def MilkShuffle(deck, accuracy):
+    
+    """
+    Accuracy: 1.0 = take exactly one card from the top and one from the bottom and put them on top of the new deck.
+    Accuracy: 0.0 = take all the cards and put them in the new deck (nothing happens)
+    """
     
     accuracy = max(0.0, min(1.0, accuracy))
     initialDeck = deck[:]
@@ -146,8 +155,12 @@ def MilkShuffle(deck, accuracy):
         
     return shuffledDeck
 
+# A shuffle wher you take clumps from the top only
 def OverhandShuffle(deck, accuracy):
-    
+    """
+    Accuracy: 1.0 = take exactly 1 card from the top and put it on top of the new deck (results in a reversed deck)
+    Accuracy: 0.0 = take the whole deck and put it in the new deck (nothing happens)
+    """
     accuracy = max(0.0, min(1.0, accuracy))
     initialDeck = deck[:]
     shuffledDeck = []
@@ -177,7 +190,14 @@ def OverhandShuffle(deck, accuracy):
     
     return shuffledDeck
 
-def OverUnderShuffle(deck, accuracy, inOutRand):
+# A shuffle where you take clumps from the top and alternate with putting the clumps on the bottom and top of the new deck
+def MongeShuffle(deck, accuracy, inOutRand):
+    #(if I've forgotten somewhere a "Over-Under Shuffle" name that is the same as Monge shuffle)
+    """
+    Accuracy: 1.0 = take exactly 1 card from the top and alternate with putting it on top or on the bottom
+    Accuracy: 0.0 = take every card from the top (nothing happens)
+    inOutRand: "i" = start with puting the card on top, "o" = start with puting the card on teh bottom. (something else = random)
+    """
     
     accuracy = max(0.0, min(1.0, accuracy))
     initialDeck = deck[:]
@@ -224,11 +244,13 @@ def OverUnderShuffle(deck, accuracy, inOutRand):
     
     return shuffledDeck
 
+# A shuffle where you split the deck in half and then riffle the parts back together like a zipper
 def RiffleShuffle(deck, offset, accuracy, inOutRand):
     """
-    Offset: 0.5 = deck split in 2 equal halves, Accuracy: 0.0 = deck cut point completly random 
-    and one half will go as a whole first then the other as  whole, 1.0 = deck cut point is exact 
-    and the halves will deposit exactly one card one after the other
+    Offset: 0.5 = deck split in 2 equal halves
+    Accuracy: 0.0 = deck cut point completly random and one half will go as a whole first then the other as a whole
+    Accuracy: 1.0 = deck cut point is exact and the halves will deposit exactly one card one after the other
+    InOutRand: "i" = start with the top half, "o" = start with the bottom half. (something else = random)
     """
     
     n = len(deck)
@@ -292,10 +314,12 @@ def RiffleShuffle(deck, offset, accuracy, inOutRand):
     #print("Offset: " + str(offset))        
     return shuffledDeck
 
+# Cutting the deck from some point and exchanging those parts places
 def CutDeck(deck, offset, accuracy):
     """
-    Offset: 0.5 = deck split in 2 equal halves, Accuracy will decrease radially from the offset 
-    point from 1 untill completly random at 0
+    Offset: 0.5 = deck split in 2 equal halves, 
+    Accuracy: 1.0 = cut exactly at offset
+    Accuracy: 0.0 = cut completly at random
     """
     
     n = len(deck)
@@ -314,6 +338,9 @@ def CutDeck(deck, offset, accuracy):
     return cutDeck
 
 
+# ---------- testing shuffles ----------
+
+# Supposedly the best computer generated shuffle of cards
 def FisherYates(deck):
     n = len(deck)
     shuffledDeck = list(deck)
@@ -323,10 +350,12 @@ def FisherYates(deck):
     
     return shuffledDeck
 
+# Simple computer generated shuffle
 def ComputerRandomShuffle(deck):
     shuffledDeck = random.sample(deck, len(deck))
     return shuffledDeck
 
+# Reversing the order of the deck
 def ReverseDeck(deck):
     reversedDeck = deck[::-1]
     return reversedDeck

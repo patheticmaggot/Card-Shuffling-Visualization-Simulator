@@ -1,6 +1,8 @@
 import utilities
 import pygame
 
+
+# Displays the chosen displaytype
 def DisplayDeckHistory(deckHistory, DisplayType):
     
     xPos = 10
@@ -26,6 +28,7 @@ def DisplayDeckHistory(deckHistory, DisplayType):
         
     return
 
+# Displays the deck as black-white gradient with same ranks being the same color
 def DisplayByRank(deck, xPos, width):
         
     n = len(deck)
@@ -60,6 +63,7 @@ def DisplayByRank(deck, xPos, width):
     
     return
 
+# Displays the deck as 2 different shades of red and black for the 4 suits
 def DisplayBySuit(deck, xPos, width):
     
     n = len(deck)
@@ -98,6 +102,7 @@ def DisplayBySuit(deck, xPos, width):
     
     return
 
+# Displays the deck as one continuous gradient from black to white
 def DisplayByOrder(deck, xPos, width):
     
     n = len(deck)
